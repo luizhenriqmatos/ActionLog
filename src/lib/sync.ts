@@ -145,16 +145,65 @@ export function mergeRemote(local: AppData, remote: RemoteRows, teamId: string):
 
 /* ---------- rede ---------- */
 
-export async function findOrCreateTeam(client: SupabaseClient, userId: string, name: string): Promise<{ id: string; name: string }> {
-  const { data: memberships, error } = await client.from('team_members').select('team_id, role, teams(name)').eq('user_id', userId).order('created_at', { ascending: true })
+export type Role = 'admin' | 'treinador' | 'analista' | 'leitura'
+export type TeamInfo = { id: string; name: string; role: Role }
+export type Member = { userId: string; email: string; role: Role; joinedAt: string }
+export type Invite = { id: string; code: string; role: Role; createdAt: string; expiresAt: string; usedAt: string | null }
+
+export async function listMyTeams(client: SupabaseClient): Promise<TeamInfo[]> {
+  const { data, error } = await client.rpc('my_teams')
   if (error) throw error
-  if (memberships && memberships.length > 0) {
-    const first = memberships[0] as unknown as { team_id: string; teams: { name: string } | null }
-    return { id: first.team_id, name: first.teams?.name ?? '' }
-  }
-  const { data: created, error: createError } = await client.from('teams').insert({ name: name || 'Meu time' }).select('id, name').single()
-  if (createError) throw createError
-  return created as { id: string; name: string }
+  return ((data ?? []) as Array<{ team_id: string; name: string; role: Role }>).map((t) => ({ id: t.team_id, name: t.name, role: t.role }))
+}
+
+/** Retorna o primeiro time do usuário ou cria um. O banco trava por usuário, então não duplica. */
+export async function ensureMyTeam(client: SupabaseClient, name: string): Promise<string> {
+  const { data, error } = await client.rpc('ensure_my_team', { p_name: name })
+  if (error) throw error
+  return data as string
+}
+
+export async function acceptInvite(client: SupabaseClient, code: string): Promise<string> {
+  const { data, error } = await client.rpc('accept_team_invite', { p_code: code })
+  if (error) throw error
+  return data as string
+}
+
+export async function createInvite(client: SupabaseClient, teamId: string, role: Role): Promise<Invite> {
+  const { data, error } = await client.from('team_invites').insert({ team_id: teamId, role }).select('*').single()
+  if (error) throw error
+  return toInvite(data as Row)
+}
+
+export async function listInvites(client: SupabaseClient, teamId: string): Promise<Invite[]> {
+  const { data, error } = await client.from('team_invites').select('*').eq('team_id', teamId).is('used_at', null).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((r) => toInvite(r as Row))
+}
+
+export async function revokeInvite(client: SupabaseClient, id: string) {
+  const { error } = await client.from('team_invites').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function listMembers(client: SupabaseClient, teamId: string): Promise<Member[]> {
+  const { data, error } = await client.rpc('list_team_members', { p_team: teamId })
+  if (error) throw error
+  return ((data ?? []) as Array<{ user_id: string; email: string; role: Role; joined_at: string }>).map((m) => ({ userId: m.user_id, email: m.email, role: m.role, joinedAt: m.joined_at }))
+}
+
+export async function setMemberRole(client: SupabaseClient, teamId: string, userId: string, role: Role) {
+  const { error } = await client.from('team_members').update({ role }).eq('team_id', teamId).eq('user_id', userId)
+  if (error) throw error
+}
+
+export async function removeMember(client: SupabaseClient, teamId: string, userId: string) {
+  const { error } = await client.from('team_members').delete().eq('team_id', teamId).eq('user_id', userId)
+  if (error) throw error
+}
+
+function toInvite(r: Row): Invite {
+  return { id: str(r.id), code: str(r.code), role: str(r.role) as Role, createdAt: str(r.created_at), expiresAt: str(r.expires_at), usedAt: r.used_at ? str(r.used_at) : null }
 }
 
 export async function pullTeam(client: SupabaseClient, teamId: string): Promise<RemoteRows> {

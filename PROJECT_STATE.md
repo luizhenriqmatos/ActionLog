@@ -69,3 +69,13 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Envio automático 1,5 s depois de cada mudança; busca novidades ao voltar para a aba, ao reconectar e a cada minuto.
 - Contadores de uma sessão em andamento não sobem; só a sessão finalizada.
 - Pendências: convite de outros membros da comissão para o mesmo time; configurar Site URL e Redirect URLs no painel do Supabase (Authentication → URL Configuration) com o endereço publicado.
+
+## v2.4 · Convites, membros e nova senha
+
+- Admin gera convite com papel (admin, treinador, analista, só leitura); cada convite vale para 1 pessoa por 7 dias. O link `/?convite=CÓDIGO` abre o login já com o convite; o código também pode ser digitado em "Entrar em outro time".
+- Painel lista a comissão com e-mail e papel; admin troca papel e remove pessoas. O banco impede que o time fique sem admin.
+- Usuário em mais de um time escolhe o time ativo; ao trocar, o aparelho envia o que falta e carrega só os dados do outro time.
+- Papel "só leitura": baixa os dados, não envia mudanças.
+- "Esqueci minha senha": envia link por e-mail; ao abrir, o app pede a senha nova.
+- Correção: `ensure_my_team` (RPC com trava por usuário) impede criar dois times no primeiro login.
+- E-mail: o servidor padrão do Supabase envia só 2 e-mails por hora e só para endereços da equipe da organização no Supabase. Para a comissão receber confirmação de cadastro e redefinição de senha, configure SMTP próprio (Authentication → Emails → SMTP Settings).

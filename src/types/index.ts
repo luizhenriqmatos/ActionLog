@@ -171,3 +171,9 @@ export function legLabels(foot: Foot): { dominant: string; nonDominant: string }
   if (foot === 'Ambidestro') return { dominant: 'Perna direita', nonDominant: 'Perna esquerda' }
   return { dominant: `Perna dominante (${foot.toLowerCase()})`, nonDominant: `Perna não dominante (${foot === 'Direita' ? 'esquerda' : 'direita'})` }
 }
+
+export function emptyAppData(teamName = ''): AppData {
+  const categories = {} as Record<CategoryId, CategoryData>
+  for (const category of CATEGORIES) categories[category] = { athletes: [], events: [], stats: {}, sessions: [] }
+  return { teamName, categories, tombstones: [] }
+}

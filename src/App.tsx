@@ -351,6 +351,9 @@ function App() {
   const [syncOpen, setSyncOpen] = useState(false)
   const sync = useSync(data, setData)
   const syncPill = <SyncPill sync={sync} onOpen={() => setSyncOpen(true)} />
+  useEffect(() => {
+    if (sync.recovery || (sync.pendingInvite && !sync.session)) setSyncOpen(true)
+  }, [sync.recovery, sync.pendingInvite, sync.session?.user.id])
   const syncPanel = syncOpen ? <SyncPanel sync={sync} onClose={() => setSyncOpen(false)} /> : null
 
   useEffect(() => {
