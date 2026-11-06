@@ -38,4 +38,6 @@
 
 ## Próxima evolução
 - [ ] Validar o calendário MD com uma comissão técnica em uma categoria real
-- [ ] Avaliar sincronização multi-dispositivo após validação do fluxo local-first
+- [x] Sincronização multi-dispositivo com Supabase (login, RLS por time, mescla por updated_at)
+- [ ] Convidar membros da comissão para o mesmo time
+- [ ] Configurar Site URL/Redirect URLs do Supabase com o domínio publicado

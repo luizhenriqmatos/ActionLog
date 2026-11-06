@@ -46,6 +46,7 @@ import {
   type SessionRecord,
   type Stats,
   type TabId,
+  type Tombstone,
   CATEGORIES,
   EMPTY_FINISHING,
   EMPTY_GAME,
@@ -57,6 +58,8 @@ import { finishingRates, formatPct, gameRates, sumFinishing, sumGame, validateFi
 import { downloadBlob } from './lib/download'
 import { PerformanceTab } from './screens/PerformanceTab'
 import { SessionEditor } from './components/SessionEditor'
+import { SyncPanel, SyncPill } from './components/SyncPanel'
+import { useSync } from './hooks/useSync'
 
 const STORAGE_KEY = 'actionlog_hub_state_v1'
 const LEGACY_KEYS = ['actionlog_state', 'actionlog_data', 'actionlog_roster']
@@ -95,6 +98,7 @@ function freshData(): AppData {
       'Sub-17': freshCategory(),
       'Sub-20': freshCategory(),
     },
+    tombstones: [],
   }
 }
 
@@ -168,6 +172,7 @@ function normalizeAthlete(raw: unknown, index: number): Athlete | null {
     height: String(athlete.height ?? athlete.heightCm ?? ''),
     weight: String(athlete.weight ?? athlete.weightKg ?? ''),
     dominantFoot: FEET.includes(athlete.dominantFoot as Foot) ? athlete.dominantFoot as Foot : 'Direita',
+    ...(typeof athlete.updatedAt === 'string' ? { updatedAt: athlete.updatedAt } : {}),
   }
 }
 
@@ -185,6 +190,7 @@ function normalizeEvent(raw: unknown, index: number): CalendarEvent | null {
     opponent: String(event.opponent ?? ''),
     location: String(event.location ?? ''),
     mdTag: typeof event.mdTag === 'string' ? event.mdTag : event.type === 'Jogo' ? 'MD' : '',
+    ...(typeof event.updatedAt === 'string' ? { updatedAt: event.updatedAt } : {}),
   }
 }
 
@@ -242,6 +248,7 @@ function normalizeStored(raw: unknown): AppData {
   if (!raw || typeof raw !== 'object') return data
   const source = raw as Partial<AppData>
   data.teamName = typeof source.teamName === 'string' ? source.teamName : ''
+  data.tombstones = Array.isArray(source.tombstones) ? source.tombstones.filter((t) => t && typeof t.id === 'string' && isCategory(String(t.category))) : []
   for (const category of CATEGORIES) {
     const saved = source.categories?.[category] as Partial<CategoryData> | undefined
     if (!saved) continue
@@ -326,9 +333,9 @@ function MetricButton({ label, value, tone, icon: Icon, invalid, onAdd, onRemove
   return <div className={`metric-card metric-${tone} ${invalid ? 'invalid' : ''}`}><button className="metric-hit" onClick={onAdd} type="button" aria-label={`${label}: ${value}. Somar 1`}><span className="metric-icon"><Icon size={18} /></span><span className="metric-label">{label}</span><strong>{value}</strong><span className="metric-add">+1</span></button><button className="metric-minus" onClick={onRemove} disabled={value === 0} type="button" aria-label={`Desfazer 1 em ${label}`}><Minus size={13} /></button></div>
 }
 
-function CategoryPicker({ data, onSelect }: { data: AppData; onSelect: (category: CategoryId) => void }) {
+function CategoryPicker({ data, onSelect, syncPill }: { data: AppData; onSelect: (category: CategoryId) => void; syncPill: ReactNode }) {
   const totalAthletes = Object.values(data.categories).reduce((sum, category) => sum + category.athletes.length, 0)
-  return <main className="app-shell picker-shell"><div className="topline"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span><span className="status-pill"><i /> local-first</span></div><section className="picker-hero"><div className="eyebrow">PAINEL DE PERFORMANCE · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{CATEGORIES.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section><div className="picker-foot"><span>Persistência local ativa</span><span>Dados físicos e calendário ficam neste dispositivo</span></div></main>
+  return <main className="app-shell picker-shell"><div className="topline"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span><span className="topline-sync">{syncPill}</span></div><section className="picker-hero"><div className="eyebrow">PAINEL DE PERFORMANCE · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{CATEGORIES.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section><div className="picker-foot"><span>Persistência local ativa</span><span>Dados físicos e calendário ficam neste dispositivo</span></div></main>
 }
 
 function App() {
@@ -341,6 +348,10 @@ function App() {
   const [report, setReport] = useState<SessionRecord | null>(null)
   const [toast, setToast] = useState('')
   const [editing, setEditing] = useState<SessionRecord | null>(null)
+  const [syncOpen, setSyncOpen] = useState(false)
+  const sync = useSync(data, setData)
+  const syncPill = <SyncPill sync={sync} onOpen={() => setSyncOpen(true)} />
+  const syncPanel = syncOpen ? <SyncPanel sync={sync} onClose={() => setSyncOpen(false)} /> : null
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
@@ -368,7 +379,13 @@ function App() {
     setData((previous) => ({ ...previous, categories: { ...previous.categories, [category]: updater(previous.categories[category]) } }))
   }
 
-  function addAthlete(athlete: Athlete) {
+  function tombstone(kind: Tombstone['kind'], id: string) {
+    if (!category) return
+    setData((previous) => ({ ...previous, tombstones: [...previous.tombstones, { kind, id, category, deletedAt: new Date().toISOString() }] }))
+  }
+
+  function addAthlete(input: Athlete) {
+    const athlete = { ...input, updatedAt: new Date().toISOString() }
     updateCategory((value) => ({ ...value, athletes: [...value.athletes, athlete], stats: { ...value.stats, [athlete.id]: freshStats() } }))
     setActiveAthleteId(athlete.id)
     setToast('Perfil físico adicionado ao elenco')
@@ -382,10 +399,12 @@ function App() {
       delete nextStats[id]
       return { ...value, athletes: value.athletes.filter((item) => item.id !== id), stats: nextStats }
     })
+    tombstone('athlete', id)
     if (activeAthleteId === id) setActiveAthleteId('')
   }
 
-  function saveCalendarDay(event: CalendarEvent) {
+  function saveCalendarDay(input: CalendarEvent) {
+    const event = { ...input, updatedAt: new Date().toISOString() }
     updateCategory((value) => {
       const exists = value.events.some((item) => item.date === event.date)
       const events = exists ? value.events.map((item) => item.date === event.date ? event : item) : [...value.events, event]
@@ -396,6 +415,7 @@ function App() {
 
   function removeCalendarDay(id: string) {
     updateCategory((value) => ({ ...value, events: value.events.filter((event) => event.id !== id) }))
+    tombstone('event', id)
     if (scoutDay?.id === id) setScoutDay(null)
     setToast('Data removida do calendário')
   }
@@ -439,6 +459,7 @@ function App() {
     const session: SessionRecord = {
       id: uid('session'),
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       category,
       mode,
       athleteId: activeAthlete.id,
@@ -465,6 +486,7 @@ function App() {
   function deleteSession(session: SessionRecord) {
     if (!window.confirm(`Excluir a sessão de ${session.athleteName} em ${formatDayMonth(session.calendarDate)}? Os indicadores serão recalculados.`)) return
     updateCategory((value) => ({ ...value, sessions: value.sessions.filter((item) => item.id !== session.id) }))
+    tombstone('session', session.id)
     setToast('Sessão excluída')
   }
 
@@ -510,9 +532,9 @@ function App() {
     setToast('PDF gerado')
   }
 
-  if (!category || !current) return <CategoryPicker data={data} onSelect={selectCategory} />
+  if (!category || !current) return <><CategoryPicker data={data} onSelect={selectCategory} syncPill={syncPill} />{syncPanel}</>
 
-  return <main className="app-shell"><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button"><ArrowLeft size={18} /> Categorias</button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-status"><i /> {data.teamName || 'Meu time'} <span className="slash">/</span> {category}</div></header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub"><button className={tab === 'roster' ? 'active' : ''} onClick={() => setTab('roster')} type="button"><Users size={17} /> Elenco <b>{current.athletes.length}</b></button><button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')} type="button"><CalendarDays size={17} /> Calendário MD <b>{current.events.length}</b></button><button className={tab === 'scout' ? 'active' : ''} onClick={() => setTab('scout')} type="button"><BarChart3 size={17} /> Central de Scout <b>{current.sessions.length}</b></button><button className={tab === 'performance' ? 'active' : ''} onClick={() => setTab('performance')} type="button"><TrendingUp size={17} /> Desempenho</button></nav>{tab === 'roster' && <RosterTab athletes={current.athletes} activeId={activeAthlete?.id ?? ''} onActive={setActiveAthleteId} onAdd={addAthlete} onRemove={removeAthlete} />}{tab === 'calendar' && <CalendarTab events={current.events} onSaveDay={saveCalendarDay} onRemoveDay={removeCalendarDay} onStartScout={startScout} />}{tab === 'scout' && <ScoutTab mode={mode} setMode={setMode} scoutDay={scoutDay} onClearContext={() => setScoutDay(null)} onOpenCalendar={() => setTab('calendar')} athletes={current.athletes} activeAthlete={activeAthlete} stats={activeStats} onActive={setActiveAthleteId} onIncrement={increment} onReset={resetStats} onFinish={finishSession} />}{tab === 'performance' && <PerformanceTab category={category} athletes={current.athletes} sessions={current.sessions} onEdit={setEditing} onDelete={deleteSession} />}{editing && <SessionEditor session={editing} onSave={(stats) => updateSession(editing.id, stats)} onClose={() => setEditing(null)} />}{report && <ReportModal session={report} onClose={() => setReport(null)} onCopy={copyReport} onDownload={downloadReport} />}{toast && <div className="toast"><Check size={16} /> {toast}</div>}</main>
+  return <main className="app-shell"><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button"><ArrowLeft size={18} /> Categorias</button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-status"><i /> {data.teamName || 'Meu time'} <span className="slash">/</span> {category}</div>{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub"><button className={tab === 'roster' ? 'active' : ''} onClick={() => setTab('roster')} type="button"><Users size={17} /> Elenco <b>{current.athletes.length}</b></button><button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')} type="button"><CalendarDays size={17} /> Calendário MD <b>{current.events.length}</b></button><button className={tab === 'scout' ? 'active' : ''} onClick={() => setTab('scout')} type="button"><BarChart3 size={17} /> Central de Scout <b>{current.sessions.length}</b></button><button className={tab === 'performance' ? 'active' : ''} onClick={() => setTab('performance')} type="button"><TrendingUp size={17} /> Desempenho</button></nav>{tab === 'roster' && <RosterTab athletes={current.athletes} activeId={activeAthlete?.id ?? ''} onActive={setActiveAthleteId} onAdd={addAthlete} onRemove={removeAthlete} />}{tab === 'calendar' && <CalendarTab events={current.events} onSaveDay={saveCalendarDay} onRemoveDay={removeCalendarDay} onStartScout={startScout} />}{tab === 'scout' && <ScoutTab mode={mode} setMode={setMode} scoutDay={scoutDay} onClearContext={() => setScoutDay(null)} onOpenCalendar={() => setTab('calendar')} athletes={current.athletes} activeAthlete={activeAthlete} stats={activeStats} onActive={setActiveAthleteId} onIncrement={increment} onReset={resetStats} onFinish={finishSession} />}{tab === 'performance' && <PerformanceTab category={category} athletes={current.athletes} sessions={current.sessions} onEdit={setEditing} onDelete={deleteSession} />}{editing && <SessionEditor session={editing} onSave={(stats) => updateSession(editing.id, stats)} onClose={() => setEditing(null)} />}{report && <ReportModal session={report} onClose={() => setReport(null)} onCopy={copyReport} onDownload={downloadReport} />}{syncPanel}{toast && <div className="toast"><Check size={16} /> {toast}</div>}</main>
 }
 
 function RosterTab({ athletes, activeId, onActive, onAdd, onRemove }: { athletes: Athlete[]; activeId: string; onActive: (id: string) => void; onAdd: (athlete: Athlete) => void; onRemove: (id: string) => void }) {

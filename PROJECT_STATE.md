@@ -45,7 +45,7 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Build: `pnpm install --frozen-lockfile && pnpm build`
 - Saída: `dist`
 - Rotas declaradas: `/` e `/hub`
-- Backend: não utilizado nesta etapa; o produto segue local-first.
+- Backend: Supabase (projeto `flniuxtlodyumvfennyw`, região São Paulo). O app segue local-first e sincroniza quando o usuário entra.
 - Próxima ação recomendada: validar o fluxo MD com uma comissão técnica usando uma categoria real e, depois, avaliar sincronização multi-dispositivo.
 
 ## v2.2 · Estatísticas e Desempenho
@@ -58,3 +58,14 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Aba **Desempenho**: filtros por tipo (partidas/finalização), atleta e período (7/30/90 dias, ano, tudo, personalizado); KPIs com variação em p.p. contra o período anterior de mesmo tamanho; gráfico de evolução com média móvel de 5 datas; dominante × não dominante; ranking; comparação de até 4 atletas; histórico com edição e exclusão; exportação CSV/JSON.
 - Regras de cálculo em `src/lib/metrics.ts`: denominador zero = "—"; períodos somam contagens antes de dividir; abaixo de 5 tentativas a taxa recebe aviso de amostra pequena e sai da posição no ranking. Testes: `pnpm test`.
 - Migração automática na leitura do `localStorage` (mesma chave `actionlog_hub_state_v1`); nenhum dado é apagado.
+
+## v2.3 · Sincronização com Supabase
+
+- Login por e-mail e senha (botão de sincronização no topo). Sem login, tudo continua só no aparelho, como antes.
+- Ao entrar pela primeira vez, o app cria um time (nome = "Nome do time") e envia elenco, calendário e sessões finalizadas que já estavam no aparelho.
+- Tabelas: `teams`, `team_members` (papéis admin/treinador/analista/leitura), `athletes`, `calendar_events`, `scout_sessions`; views `v_scout_session_rates` e `v_athlete_totals`. Migrations em `supabase/migrations/`.
+- RLS: cada usuário só lê e escreve dados do time de que é membro; papel `leitura` só lê. Funções auxiliares ficam no schema `private` (fora da API).
+- Mescla: por registro, vence o `updated_at` mais recente. Exclusões viram `deleted_at` no servidor (tombstone) para sumirem nos outros aparelhos.
+- Envio automático 1,5 s depois de cada mudança; busca novidades ao voltar para a aba, ao reconectar e a cada minuto.
+- Contadores de uma sessão em andamento não sobem; só a sessão finalizada.
+- Pendências: convite de outros membros da comissão para o mesmo time; configurar Site URL e Redirect URLs no painel do Supabase (Authentication → URL Configuration) com o endereço publicado.

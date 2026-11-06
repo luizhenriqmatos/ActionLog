@@ -44,6 +44,7 @@ export type Athlete = {
   height: string
   weight: string
   dominantFoot: Foot
+  updatedAt?: string
 }
 
 export type CalendarEvent = {
@@ -54,6 +55,7 @@ export type CalendarEvent = {
   opponent: string
   location: string
   mdTag: string
+  updatedAt?: string
 }
 
 export type Stats = {
@@ -83,6 +85,9 @@ export type SessionRecord = {
   schemaVersion: 2
 }
 
+/** Registro de exclusão, para a remoção chegar aos outros aparelhos na sincronização. */
+export type Tombstone = { kind: 'athlete' | 'event' | 'session'; id: string; category: CategoryId; deletedAt: string }
+
 export type CategoryData = {
   athletes: Athlete[]
   events: CalendarEvent[]
@@ -93,6 +98,8 @@ export type CategoryData = {
 export type AppData = {
   teamName: string
   categories: Record<CategoryId, CategoryData>
+  /** Exclusões ainda não enviadas ao servidor. */
+  tombstones: Tombstone[]
 }
 
 export const CATEGORIES: CategoryId[] = ['Sub-15', 'Sub-16', 'Sub-17', 'Sub-20']
