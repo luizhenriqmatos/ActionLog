@@ -94,10 +94,10 @@ export function ProfileScreen({ sync }: { sync: SyncApi }) {
           <button className="club-card" key={club.id} onClick={() => sync.enterClub(club.id)} type="button">
             <span className="club-badge">{(club.name || 'C').slice(0, 1).toUpperCase()}</span>
             <span className="club-copy"><strong>{club.name || 'Clube sem nome'}</strong><small>{ROLE_LABEL[club.role]} · {club.athletes} atleta{club.athletes === 1 ? '' : 's'} · {club.evaluations} avaliaç{club.evaluations === 1 ? 'ão' : 'ões'}</small></span>
-            <ChevronRight size={20} className="category-arrow" />
+            <ChevronRight size={20} className="club-arrow" />
           </button>
         ))}
-        {sync.canCreate && (creating ? (
+        {sync.clubsLoaded && sync.canCreate && (creating ? (
           <form className="club-card club-form" onSubmit={create}>
             <div className="club-form-head"><strong>Novo clube</strong><button className="icon-button" onClick={() => setCreating(false)} type="button" aria-label="Cancelar"><X size={16} /></button></div>
             <input autoFocus required value={clubName} onChange={(e) => setClubName(e.target.value)} placeholder="Nome do clube ou escolinha" aria-label="Nome do clube" />

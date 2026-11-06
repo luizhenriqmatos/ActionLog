@@ -1,9 +1,19 @@
+import { useEffect, useState } from 'react'
 import type { EvolutionPoint } from '../lib/metrics'
 import { formatPct } from '../lib/metrics'
 
-const W = 640
-const H = 240
-const PAD = { top: 16, right: 16, bottom: 30, left: 40 }
+/** Tamanho do desenho: no celular o gráfico usa um quadro menor, para o texto não encolher demais. */
+function useCompact() {
+  const query = '(max-width: 760px)'
+  const [compact, setCompact] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const media = window.matchMedia(query)
+    const update = () => setCompact(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+  return compact
+}
 
 /** Linha de evolução (0–100%) com média móvel tracejada. Sem dependências externas. */
 type ScaleOptions = { min?: number; max?: number; ticks?: number[]; format?: (value: number | null) => string; movingLabel?: string; unitLabel?: (point: EvolutionPoint) => string }
@@ -13,6 +23,10 @@ export function EvolutionChart({ points, label, scale = {} }: { points: Evolutio
   const max = scale.max ?? 100
   const ticks = scale.ticks ?? [0, 25, 50, 75, 100]
   const fmt = scale.format ?? formatPct
+  const compact = useCompact()
+  const W = compact ? 340 : 640
+  const H = compact ? 220 : 240
+  const PAD = compact ? { top: 14, right: 12, bottom: 28, left: 40 } : { top: 16, right: 16, bottom: 30, left: 40 }
   if (points.length === 0) return <div className="chart-empty">Sem sessões no período para desenhar a evolução.</div>
   const innerW = W - PAD.left - PAD.right
   const innerH = H - PAD.top - PAD.bottom
@@ -29,7 +43,7 @@ export function EvolutionChart({ points, label, scale = {} }: { points: Evolutio
     })
     return d.trim()
   }
-  const step = Math.max(1, Math.ceil(points.length / 8))
+  const step = Math.max(1, Math.ceil(points.length / (compact ? 4 : 8)))
   const last = [...points].reverse().find((point) => point.value !== null)
   return (
     <figure className="chart">

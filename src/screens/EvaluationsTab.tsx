@@ -42,17 +42,17 @@ export function EvaluationsTab({ athletes, evaluations, today, readOnly, onNew, 
           <div className="total-card"><span>Avaliações feitas</span><strong>{evaluations.length}</strong><small>no histórico da categoria</small></div>
         </div>
         <div className="perf-card">
-          <div className="table-wrap"><table className="perf-table">
+          <div className="table-wrap"><table className="perf-table stack-table">
             <thead><tr><th className="left">Atleta</th><th className="left">Situação</th><th>Última</th><th>Média</th><th className="left">Evolução</th><th>Avaliações</th><th /></tr></thead>
             <tbody>{sorted.map(({ athlete, status, count, avg, t }) => (
               <tr key={athlete.id}>
-                <td className="left"><strong>{athlete.name}</strong> <small>{athlete.number ? `#${athlete.number} · ` : ''}{athlete.positions}</small></td>
-                <td className="left">{status.due ? <span className="low-pill">{status.last ? `há ${status.daysSince} dias` : 'nunca avaliado'}</span> : <span className="ok-pill">em dia</span>}</td>
-                <td>{status.last ? status.last.date.split('-').reverse().slice(0, 2).join('/') : '—'}</td>
-                <td><b>{formatScore(avg)}</b></td>
-                <td className="left">{t ? <span className={`trend trend-${t}`}>{TREND_LABEL[t]}</span> : <small>—</small>}</td>
-                <td>{count}</td>
-                <td className="row-actions">
+                <td className="left stack-title"><strong>{athlete.name}</strong> <small>{athlete.number ? `#${athlete.number} · ` : ''}{athlete.positions}</small></td>
+                <td className="left" data-label="Situação">{status.due ? <span className="low-pill">{status.last ? `há ${status.daysSince} dias` : 'nunca avaliado'}</span> : <span className="ok-pill">em dia</span>}</td>
+                <td data-label="Última">{status.last ? status.last.date.split('-').reverse().slice(0, 2).join('/') : '—'}</td>
+                <td data-label="Média"><b>{formatScore(avg)}</b></td>
+                <td className="left" data-label="Evolução">{t ? <span className={`trend trend-${t}`}>{TREND_LABEL[t]}</span> : <small>—</small>}</td>
+                <td data-label="Avaliações">{count}</td>
+                <td className="row-actions stack-actions">
                   {!readOnly && <button className="secondary-button compact" onClick={() => onNew(athlete)} type="button"><Plus size={14} /> Avaliar</button>}
                   <button className="icon-button" onClick={() => onOpenFile(athlete)} type="button" aria-label={`Histórico de ${athlete.name}`}><FolderOpen size={14} /></button>
                   <button className="icon-button" onClick={() => onReport(athlete)} type="button" aria-label={`Relatório para os pais de ${athlete.name}`}><FileText size={14} /></button>

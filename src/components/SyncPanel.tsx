@@ -29,7 +29,7 @@ export function SyncPill({ sync, onOpen }: { sync: SyncApi; onOpen: () => void }
   const text = !sync.session ? (sync.pendingInvite ? 'convite pendente · entrar' : 'entrar para sincronizar') : sync.readOnly ? 'só leitura' : LABEL[sync.status]
   return (
     <button className={`status-pill sync-pill sync-${tone}`} onClick={onOpen} type="button" aria-label={`Sincronização: ${text}. Abrir painel`}>
-      {sync.session ? <Cloud size={13} /> : <CloudOff size={13} />} {text}
+      {sync.session ? <Cloud size={13} /> : <CloudOff size={13} />}<span className="pill-text"> {text}</span>
     </button>
   )
 }
