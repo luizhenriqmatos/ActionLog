@@ -2,7 +2,7 @@
 
 ## Estado da implementação
 
-A aplicação está na versão 2.1 do hub por categoria, com persistência local em `localStorage` e build estático Vite publicado pelo projeto Webdev. O fluxo base permanece: Seletor de Categoria → Hub da categoria → abas Elenco, Calendário MD e Central de Scout.
+A aplicação está na versão 2.2 do hub por categoria (estatísticas de partida completas, indicadores calculados e aba Desempenho), com persistência local em `localStorage` e build estático Vite publicado pelo projeto Webdev. O fluxo base permanece: Seletor de Categoria → Hub da categoria → abas Elenco, Calendário MD e Central de Scout.
 
 ## Arquitetura do Calendário Tático
 
@@ -45,5 +45,27 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Build: `pnpm install --frozen-lockfile && pnpm build`
 - Saída: `dist`
 - Rotas declaradas: `/` e `/hub`
-- Backend: não utilizado nesta etapa; o produto segue local-first.
+- Backend: Supabase (projeto `flniuxtlodyumvfennyw`, região São Paulo). O app segue local-first e sincroniza quando o usuário entra.
 - Próxima ação recomendada: validar o fluxo MD com uma comissão técnica usando uma categoria real e, depois, avaliar sincronização multi-dispositivo.
+
+## v2.2 · Estatísticas e Desempenho
+
+- Scout de Jogo agora registra gols, assistências, finalizações, finalizações no gol, passes certos, passes errados, desarmes, perdas da posse, faltas cometidas e faltas sofridas. O total de passes é derivado (certos + errados); o antigo contador "Passes" foi removido e o valor de sessões antigas fica em `legacyPasses`, só para consulta.
+- Cada card tem `+1` (toque) e `−` (desfazer). Indicadores ao vivo aparecem abaixo dos contadores.
+- Validação: finalizações no gol ≤ finalizações e gols ≤ no gol (por perna no treino). Com erro, "Finalizar sessão" fica bloqueado.
+- Pé dominante aceita `Ambidestro`. A sessão guarda `dominantFootSnapshot`, então mudar o cadastro não reescreve o histórico. Para ambidestro, as pernas viram direita/esquerda e os indicadores dominante/não dominante não se aplicam.
+- A sessão guarda `eventId` e `eventType` do compromisso do calendário. Sessões antigas são vinculadas pela data na migração.
+- Aba **Desempenho**: filtros por tipo (partidas/finalização), atleta e período (7/30/90 dias, ano, tudo, personalizado); KPIs com variação em p.p. contra o período anterior de mesmo tamanho; gráfico de evolução com média móvel de 5 datas; dominante × não dominante; ranking; comparação de até 4 atletas; histórico com edição e exclusão; exportação CSV/JSON.
+- Regras de cálculo em `src/lib/metrics.ts`: denominador zero = "—"; períodos somam contagens antes de dividir; abaixo de 5 tentativas a taxa recebe aviso de amostra pequena e sai da posição no ranking. Testes: `pnpm test`.
+- Migração automática na leitura do `localStorage` (mesma chave `actionlog_hub_state_v1`); nenhum dado é apagado.
+
+## v2.3 · Sincronização com Supabase
+
+- Login por e-mail e senha (botão de sincronização no topo). Sem login, tudo continua só no aparelho, como antes.
+- Ao entrar pela primeira vez, o app cria um time (nome = "Nome do time") e envia elenco, calendário e sessões finalizadas que já estavam no aparelho.
+- Tabelas: `teams`, `team_members` (papéis admin/treinador/analista/leitura), `athletes`, `calendar_events`, `scout_sessions`; views `v_scout_session_rates` e `v_athlete_totals`. Migrations em `supabase/migrations/`.
+- RLS: cada usuário só lê e escreve dados do time de que é membro; papel `leitura` só lê. Funções auxiliares ficam no schema `private` (fora da API).
+- Mescla: por registro, vence o `updated_at` mais recente. Exclusões viram `deleted_at` no servidor (tombstone) para sumirem nos outros aparelhos.
+- Envio automático 1,5 s depois de cada mudança; busca novidades ao voltar para a aba, ao reconectar e a cada minuto.
+- Contadores de uma sessão em andamento não sobem; só a sessão finalizada.
+- Pendências: convite de outros membros da comissão para o mesmo time; configurar Site URL e Redirect URLs no painel do Supabase (Authentication → URL Configuration) com o endereço publicado.

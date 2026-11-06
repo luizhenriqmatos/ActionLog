@@ -26,6 +26,18 @@
 - [x] Exportação de Relatório em PDF
 - [x] Função de Copiar para WhatsApp com título `Relatório de [Jogo/Treino] - [Categoria] - [MD-x] (dd/mm)`
 
+## Estatísticas e Desempenho (v2.2)
+- [x] Gols, finalizações e finalizações no gol no Scout de Jogo; total de passes derivado
+- [x] Desfazer (−1) em cada contador
+- [x] Validação de consistência e bloqueio de finalização com erro
+- [x] Pé ambidestro e snapshot do pé dominante na sessão
+- [x] Vínculo da sessão com o compromisso do calendário (eventId)
+- [x] Indicadores: aproveitamento, conversão, precisão de passe, eficiência por perna
+- [x] Aba Desempenho: filtros, evolução, ranking, comparação, histórico editável, export CSV/JSON
+- [x] Testes das regras de cálculo (`pnpm test`)
+
 ## Próxima evolução
 - [ ] Validar o calendário MD com uma comissão técnica em uma categoria real
-- [ ] Avaliar sincronização multi-dispositivo após validação do fluxo local-first
+- [x] Sincronização multi-dispositivo com Supabase (login, RLS por time, mescla por updated_at)
+- [ ] Convidar membros da comissão para o mesmo time
+- [ ] Configurar Site URL/Redirect URLs do Supabase com o domínio publicado
