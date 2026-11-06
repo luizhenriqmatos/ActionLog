@@ -2,7 +2,7 @@ export type CategoryId = 'Sub-15' | 'Sub-16' | 'Sub-17' | 'Sub-20'
 export type ScoutMode = 'game' | 'finishing'
 export type Foot = 'Direita' | 'Esquerda' | 'Ambidestro'
 export type EventType = 'Jogo' | 'Treino'
-export type TabId = 'roster' | 'calendar' | 'scout' | 'performance'
+export type TabId = 'roster' | 'calendar' | 'scout' | 'performance' | 'evaluations'
 export type CalendarView = 'month' | 'week'
 
 /**
@@ -86,13 +86,31 @@ export type SessionRecord = {
 }
 
 /** Registro de exclusão, para a remoção chegar aos outros aparelhos na sincronização. */
-export type Tombstone = { kind: 'athlete' | 'event' | 'session'; id: string; category: CategoryId; deletedAt: string }
+export type Tombstone = { kind: 'athlete' | 'event' | 'session' | 'evaluation'; id: string; category: CategoryId; deletedAt: string }
+
+/** Avaliação periódica do treinador: nota de 1 a 5 por critério (critério sem nota = não avaliado). */
+export type Evaluation = {
+  id: string
+  athleteId: string
+  athleteName: string
+  date: string
+  period: string
+  scores: Record<string, number>
+  strengths: string
+  improvements: string
+  goals: string
+  coachNote: string
+  evaluator: string
+  createdAt: string
+  updatedAt: string
+}
 
 export type CategoryData = {
   athletes: Athlete[]
   events: CalendarEvent[]
   stats: Record<string, Stats>
   sessions: SessionRecord[]
+  evaluations: Evaluation[]
 }
 
 export type AppData = {
@@ -174,6 +192,6 @@ export function legLabels(foot: Foot): { dominant: string; nonDominant: string }
 
 export function emptyAppData(teamName = ''): AppData {
   const categories = {} as Record<CategoryId, CategoryData>
-  for (const category of CATEGORIES) categories[category] = { athletes: [], events: [], stats: {}, sessions: [] }
+  for (const category of CATEGORIES) categories[category] = { athletes: [], events: [], stats: {}, sessions: [], evaluations: [] }
   return { teamName, categories, tombstones: [] }
 }

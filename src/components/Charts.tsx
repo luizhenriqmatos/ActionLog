@@ -6,12 +6,18 @@ const H = 240
 const PAD = { top: 16, right: 16, bottom: 30, left: 40 }
 
 /** Linha de evolução (0–100%) com média móvel tracejada. Sem dependências externas. */
-export function EvolutionChart({ points, label }: { points: EvolutionPoint[]; label: string }) {
+type ScaleOptions = { min?: number; max?: number; ticks?: number[]; format?: (value: number | null) => string; movingLabel?: string; unitLabel?: (point: EvolutionPoint) => string }
+
+export function EvolutionChart({ points, label, scale = {} }: { points: EvolutionPoint[]; label: string; scale?: ScaleOptions }) {
+  const min = scale.min ?? 0
+  const max = scale.max ?? 100
+  const ticks = scale.ticks ?? [0, 25, 50, 75, 100]
+  const fmt = scale.format ?? formatPct
   if (points.length === 0) return <div className="chart-empty">Sem sessões no período para desenhar a evolução.</div>
   const innerW = W - PAD.left - PAD.right
   const innerH = H - PAD.top - PAD.bottom
   const x = (index: number) => PAD.left + (points.length === 1 ? innerW / 2 : (index * innerW) / (points.length - 1))
-  const y = (value: number) => PAD.top + innerH - (value / 100) * innerH
+  const y = (value: number) => PAD.top + innerH - ((value - min) / (max - min)) * innerH
   const path = (key: 'value' | 'moving') => {
     let d = ''
     let open = false
@@ -28,10 +34,10 @@ export function EvolutionChart({ points, label }: { points: EvolutionPoint[]; la
   return (
     <figure className="chart">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label} por data`}>
-        {[0, 25, 50, 75, 100].map((tick) => (
+        {ticks.map((tick) => (
           <g key={tick}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y(tick)} y2={y(tick)} className="chart-grid" />
-            <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" className="chart-tick">{tick}%</text>
+            <text x={PAD.left - 8} y={y(tick) + 4} textAnchor="end" className="chart-tick">{scale.format ? fmt(tick) : `${tick}%`}</text>
           </g>
         ))}
         {points.map((point, index) => index % step === 0 || index === points.length - 1 ? (
@@ -41,11 +47,11 @@ export function EvolutionChart({ points, label }: { points: EvolutionPoint[]; la
         <path d={path('value')} className="chart-line" />
         {points.map((point, index) => point.value === null ? null : (
           <circle key={point.date} cx={x(index)} cy={y(point.value)} r={point === last ? 5 : 3} className={point === last ? 'chart-dot last' : 'chart-dot'}>
-            <title>{`${point.label}: ${formatPct(point.value)} (${point.denominator} tentativas)`}</title>
+            <title>{scale.unitLabel ? scale.unitLabel(point) : `${point.label}: ${fmt(point.value)} (${point.denominator} tentativas)`}</title>
           </circle>
         ))}
       </svg>
-      <figcaption className="chart-legend"><span><i className="sw line" /> {label} por data</span><span><i className="sw moving" /> média móvel de 5 datas (soma das contagens)</span></figcaption>
+      <figcaption className="chart-legend"><span><i className="sw line" /> {label} por data</span>{scale.movingLabel !== '' && <span><i className="sw moving" /> {scale.movingLabel ?? 'média móvel de 5 datas (soma das contagens)'}</span>}</figcaption>
     </figure>
   )
 }

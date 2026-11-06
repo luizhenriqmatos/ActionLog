@@ -34,6 +34,10 @@ export function SyncPill({ sync, onOpen }: { sync: SyncApi; onOpen: () => void }
   )
 }
 
+export function NewPasswordPanel({ sync, onDone }: { sync: SyncApi; onDone: () => void }) {
+  return <NewPassword sync={sync} onDone={onDone} />
+}
+
 export function SyncPanel({ sync, onClose }: { sync: SyncApi; onClose: () => void }) {
   return (
     <div className="modal-backdrop" role="presentation">
@@ -48,7 +52,7 @@ export function SyncPanel({ sync, onClose }: { sync: SyncApi; onClose: () => voi
   )
 }
 
-function SignedOut({ sync }: { sync: SyncApi }) {
+export function SignedOut({ sync }: { sync: SyncApi }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'in' | 'up' | 'forgot'>('in')
@@ -138,7 +142,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
       setInvites(i)
     } catch (err) { setMessage({ tone: 'error', text: errorText(err) }) }
   }
-  useEffect(() => { void reload(); void sync.refreshTeams() }, [sync.team?.id])
+  useEffect(() => { void reload() }, [sync.team?.id])
 
   const link = (invite: Invite) => `${window.location.origin}/?convite=${invite.code}`
 
@@ -176,13 +180,6 @@ function SignedIn({ sync }: { sync: SyncApi }) {
     <div className="sync-signed">
       <h2 id="sync-title" className="editor-title">{sync.team?.name || 'Seu time'}</h2>
       <p className="report-meta">{sync.session?.user.email} · {sync.team ? ROLE_LABEL[sync.team.role] : '—'}</p>
-      {sync.teams.length > 1 && (
-        <label className="sync-team-select" htmlFor="team-select">Time ativo
-          <select id="team-select" value={sync.team?.id ?? ''} onChange={(e) => void sync.switchTeam(e.target.value)}>
-            {sync.teams.map((t) => <option key={t.id} value={t.id}>{t.name || 'Sem nome'} · {ROLE_LABEL[t.role]}</option>)}
-          </select>
-        </label>
-      )}
       <div className="sync-facts">
         <div><span>Estado</span><strong>{sync.readOnly ? 'só leitura' : LABEL[sync.status]}</strong></div>
         <div><span>Última sincronização</span><strong>{last}</strong></div>
@@ -229,7 +226,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
                 <button className="secondary-button" onClick={() => void copy(link(justCreated), justCreated.id)} type="button">{copied === justCreated.id ? <Check size={15} /> : <Copy size={15} />} {copied === justCreated.id ? 'Copiado' : 'Copiar link'}</button>
                 <a className="secondary-button" href={whatsapp(justCreated)} target="_blank" rel="noreferrer"><MessageCircle size={15} /> WhatsApp</a>
               </div>
-              <small>Ou o código <b>{justCreated.code}</b>, para digitar em "Entrar em outro time".</small>
+              <small>Ou o código <b>{justCreated.code}</b>, para digitar no perfil, em "Tenho um código de convite".</small>
             </div>
           )}
           {invites.length > 0 && (
@@ -247,7 +244,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
       )}
 
       <section className="sync-section">
-        <h3>Entrar em outro time</h3>
+        <h3>Entrar em outro clube com código</h3>
         <form className="invite-row" onSubmit={join}>
           <input aria-label="Código do convite" placeholder="Código do convite" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={12} />
           <button className="secondary-button" disabled={busy || !code.trim()} type="submit">Entrar</button>
@@ -256,8 +253,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
 
       <p className="perf-note">Os contadores de uma sessão em andamento ficam só no aparelho que está registrando. Eles sobem quando você toca em "Finalizar sessão".</p>
       <div className="modal-actions">
-        <button className="secondary-button" onClick={() => void sync.signOut()} type="button"><LogOut size={16} /> Sair</button>
-        <button className="primary-button" onClick={() => void sync.syncNow()} disabled={sync.status === 'syncing'} type="button"><RefreshCw size={16} /> Sincronizar agora</button>
+        <button className="primary-button" onClick={() => void sync.syncNow()} disabled={sync.status === 'syncing' || !sync.team} type="button"><RefreshCw size={16} /> Sincronizar agora</button>
       </div>
     </div>
   )

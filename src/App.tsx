@@ -37,6 +37,7 @@ import {
   type CalendarEvent,
   type CalendarView,
   type CategoryData,
+  type Evaluation,
   type CategoryId,
   type EventType,
   type FinishingMetric,
@@ -60,6 +61,12 @@ import { PerformanceTab } from './screens/PerformanceTab'
 import { SessionEditor } from './components/SessionEditor'
 import { SyncPanel, SyncPill } from './components/SyncPanel'
 import { useSync } from './hooks/useSync'
+import { LoginScreen, ProfileScreen } from './screens/AccessScreens'
+import { EvaluationsTab } from './screens/EvaluationsTab'
+import { EvaluationForm } from './components/EvaluationForm'
+import { AthleteFile } from './components/AthleteFile'
+import { ParentReport } from './components/ParentReport'
+import { previousOf } from './lib/evaluations'
 
 const STORAGE_KEY = 'actionlog_hub_state_v1'
 const LEGACY_KEYS = ['actionlog_state', 'actionlog_data', 'actionlog_roster']
@@ -86,7 +93,20 @@ const GAME_METRICS: Array<{ key: GameMetric; label: string; icon: typeof Activit
 ]
 
 function freshCategory(): CategoryData {
-  return { athletes: [], events: [], stats: {}, sessions: [] }
+  return { athletes: [], events: [], stats: {}, sessions: [], evaluations: [] }
+}
+
+/** Limite interno de atletas por categoria em cada clube. */
+const MAX_ATHLETES_PER_CATEGORY = 100
+
+function normalizeEvaluation(raw: unknown): Evaluation | null {
+  if (!raw || typeof raw !== 'object') return null
+  const e = raw as Record<string, unknown>
+  if (typeof e.id !== 'string' || typeof e.athleteId !== 'string' || typeof e.date !== 'string') return null
+  const scores: Record<string, number> = {}
+  if (e.scores && typeof e.scores === 'object') for (const [k, v] of Object.entries(e.scores as Record<string, unknown>)) { const n = Number(v); if (n >= 1 && n <= 5) scores[k] = n }
+  const text = (v: unknown) => (typeof v === 'string' ? v : '')
+  return { id: e.id, athleteId: e.athleteId, athleteName: text(e.athleteName), date: e.date, period: text(e.period), scores, strengths: text(e.strengths), improvements: text(e.improvements), goals: text(e.goals), coachNote: text(e.coachNote), evaluator: text(e.evaluator), createdAt: text(e.createdAt) || new Date().toISOString(), updatedAt: text(e.updatedAt) || text(e.createdAt) || new Date().toISOString() }
 }
 
 function freshData(): AppData {
@@ -260,7 +280,8 @@ function normalizeStored(raw: unknown): AppData {
     const rawStats = saved.stats && typeof saved.stats === 'object' ? saved.stats as Record<string, unknown> : {}
     const stats: Record<string, Stats> = {}
     Object.entries(rawStats).forEach(([id, value]) => { stats[id] = normalizeStats(value).stats })
-    data.categories[category] = { athletes, events, stats, sessions }
+    const evaluations = Array.isArray(saved.evaluations) ? saved.evaluations.map(normalizeEvaluation).filter((item): item is Evaluation => Boolean(item)) : []
+    data.categories[category] = { athletes, events, stats, sessions, evaluations }
   }
   return data
 }
@@ -333,9 +354,9 @@ function MetricButton({ label, value, tone, icon: Icon, invalid, onAdd, onRemove
   return <div className={`metric-card metric-${tone} ${invalid ? 'invalid' : ''}`}><button className="metric-hit" onClick={onAdd} type="button" aria-label={`${label}: ${value}. Somar 1`}><span className="metric-icon"><Icon size={18} /></span><span className="metric-label">{label}</span><strong>{value}</strong><span className="metric-add">+1</span></button><button className="metric-minus" onClick={onRemove} disabled={value === 0} type="button" aria-label={`Desfazer 1 em ${label}`}><Minus size={13} /></button></div>
 }
 
-function CategoryPicker({ data, onSelect, syncPill }: { data: AppData; onSelect: (category: CategoryId) => void; syncPill: ReactNode }) {
+function CategoryPicker({ data, onSelect, syncPill, clubName, onBack }: { data: AppData; onSelect: (category: CategoryId) => void; syncPill: ReactNode; clubName: string; onBack: () => void }) {
   const totalAthletes = Object.values(data.categories).reduce((sum, category) => sum + category.athletes.length, 0)
-  return <main className="app-shell picker-shell"><div className="topline"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span><span className="topline-sync">{syncPill}</span></div><section className="picker-hero"><div className="eyebrow">PAINEL DE PERFORMANCE · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{CATEGORIES.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section></main>
+  return <main className="app-shell picker-shell"><div className="topline"><button className="back-button" onClick={onBack} type="button"><ArrowLeft size={18} /> Meus clubes</button><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span><span className="topline-sync">{syncPill}</span></div><section className="picker-hero"><div className="eyebrow">{(clubName || 'Meu clube').toUpperCase()} · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{CATEGORIES.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section></main>
 }
 
 function App() {
@@ -351,9 +372,9 @@ function App() {
   const [syncOpen, setSyncOpen] = useState(false)
   const sync = useSync(data, setData)
   const syncPill = <SyncPill sync={sync} onOpen={() => setSyncOpen(true)} />
-  useEffect(() => {
-    if (sync.recovery || (sync.pendingInvite && !sync.session)) setSyncOpen(true)
-  }, [sync.recovery, sync.pendingInvite, sync.session?.user.id])
+  const [evalTarget, setEvalTarget] = useState<{ athlete: Athlete; existing: Evaluation | null } | null>(null)
+  const [fileAthleteId, setFileAthleteId] = useState('')
+  const [reportAthleteId, setReportAthleteId] = useState('')
   const syncPanel = syncOpen ? <SyncPanel sync={sync} onClose={() => setSyncOpen(false)} /> : null
 
   useEffect(() => {
@@ -388,6 +409,7 @@ function App() {
   }
 
   function addAthlete(input: Athlete) {
+    if (current && current.athletes.length >= MAX_ATHLETES_PER_CATEGORY) { setToast('Esta categoria atingiu o limite de atletas.'); return }
     const athlete = { ...input, updatedAt: new Date().toISOString() }
     updateCategory((value) => ({ ...value, athletes: [...value.athletes, athlete], stats: { ...value.stats, [athlete.id]: freshStats() } }))
     setActiveAthleteId(athlete.id)
@@ -493,6 +515,23 @@ function App() {
     setToast('Sessão excluída')
   }
 
+  function saveEvaluation(evaluation: Evaluation) {
+    updateCategory((value) => {
+      const list = value.evaluations ?? []
+      const exists = list.some((item) => item.id === evaluation.id)
+      return { ...value, evaluations: (exists ? list.map((item) => (item.id === evaluation.id ? evaluation : item)) : [...list, evaluation]).sort((a, b) => a.date.localeCompare(b.date)) }
+    })
+    setEvalTarget(null)
+    setToast('Avaliação salva')
+  }
+
+  function deleteEvaluation(evaluation: Evaluation) {
+    if (!window.confirm(`Excluir a avaliação de ${evaluation.athleteName} de ${formatDayMonth(evaluation.date)}?`)) return
+    updateCategory((value) => ({ ...value, evaluations: (value.evaluations ?? []).filter((item) => item.id !== evaluation.id) }))
+    tombstone('evaluation', evaluation.id)
+    setToast('Avaliação excluída')
+  }
+
   function reportTitle(session: SessionRecord) {
     const kind = session.mode === 'game' ? 'Jogo' : 'Treino'
     const tag = session.periodizationTag || 'Sessão avulsa'
@@ -535,12 +574,21 @@ function App() {
     setToast('PDF gerado')
   }
 
-  if (!category || !current) return <><CategoryPicker data={data} onSelect={selectCategory} syncPill={syncPill} />{syncPanel}</>
+  if (sync.enabled && !sync.session) return <LoginScreen sync={sync} />
+  if (sync.enabled && (!sync.team || sync.recovery)) return <ProfileScreen sync={sync} />
 
-  return <main className="app-shell"><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button"><ArrowLeft size={18} /> Categorias</button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-status"><i /> {data.teamName || 'Meu time'} <span className="slash">/</span> {category}</div>{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub"><button className={tab === 'roster' ? 'active' : ''} onClick={() => setTab('roster')} type="button"><Users size={17} /> Elenco <b>{current.athletes.length}</b></button><button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')} type="button"><CalendarDays size={17} /> Calendário MD <b>{current.events.length}</b></button><button className={tab === 'scout' ? 'active' : ''} onClick={() => setTab('scout')} type="button"><BarChart3 size={17} /> Central de Scout <b>{current.sessions.length}</b></button><button className={tab === 'performance' ? 'active' : ''} onClick={() => setTab('performance')} type="button"><TrendingUp size={17} /> Desempenho</button></nav>{tab === 'roster' && <RosterTab athletes={current.athletes} activeId={activeAthlete?.id ?? ''} onActive={setActiveAthleteId} onAdd={addAthlete} onRemove={removeAthlete} />}{tab === 'calendar' && <CalendarTab events={current.events} onSaveDay={saveCalendarDay} onRemoveDay={removeCalendarDay} onStartScout={startScout} />}{tab === 'scout' && <ScoutTab mode={mode} setMode={setMode} scoutDay={scoutDay} onClearContext={() => setScoutDay(null)} onOpenCalendar={() => setTab('calendar')} athletes={current.athletes} activeAthlete={activeAthlete} stats={activeStats} onActive={setActiveAthleteId} onIncrement={increment} onReset={resetStats} onFinish={finishSession} />}{tab === 'performance' && <PerformanceTab category={category} athletes={current.athletes} sessions={current.sessions} onEdit={setEditing} onDelete={deleteSession} />}{editing && <SessionEditor session={editing} onSave={(stats) => updateSession(editing.id, stats)} onClose={() => setEditing(null)} />}{report && <ReportModal session={report} onClose={() => setReport(null)} onCopy={copyReport} onDownload={downloadReport} />}{syncPanel}{toast && <div className="toast"><Check size={16} /> {toast}</div>}</main>
+  if (!category || !current) return <><CategoryPicker data={data} onSelect={selectCategory} syncPill={syncPill} clubName={sync.team?.name || data.teamName} onBack={() => { setCategory(null); void sync.leaveClub() }} />{syncPanel}</>
+
+  const evaluations = current.evaluations ?? []
+  const evaluator = sync.profileName || sync.session?.user.email || ''
+  const fileAthlete = current.athletes.find((a) => a.id === fileAthleteId)
+  const reportAthlete = current.athletes.find((a) => a.id === reportAthleteId)
+  const lastEvalOf = (athleteId: string) => evaluations.filter((e) => e.athleteId === athleteId).sort((a, b) => a.date.localeCompare(b.date)).pop() ?? null
+
+  return <main className="app-shell"><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button"><ArrowLeft size={18} /> Categorias</button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-status"><i /> {data.teamName || 'Meu time'} <span className="slash">/</span> {category}</div>{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub"><button className={tab === 'roster' ? 'active' : ''} onClick={() => setTab('roster')} type="button"><Users size={17} /> Elenco <b>{current.athletes.length}</b></button><button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')} type="button"><CalendarDays size={17} /> Calendário MD <b>{current.events.length}</b></button><button className={tab === 'scout' ? 'active' : ''} onClick={() => setTab('scout')} type="button"><BarChart3 size={17} /> Central de Scout <b>{current.sessions.length}</b></button><button className={tab === 'performance' ? 'active' : ''} onClick={() => setTab('performance')} type="button"><TrendingUp size={17} /> Desempenho</button><button className={tab === 'evaluations' ? 'active' : ''} onClick={() => setTab('evaluations')} type="button"><ClipboardCheck size={17} /> Avaliações <b>{evaluations.length}</b></button></nav>{tab === 'roster' && <RosterTab athletes={current.athletes} activeId={activeAthlete?.id ?? ''} onActive={setActiveAthleteId} onAdd={addAthlete} onRemove={removeAthlete} onOpenFile={setFileAthleteId} />}{tab === 'evaluations' && <EvaluationsTab athletes={current.athletes} evaluations={evaluations} today={todayIso()} readOnly={sync.readOnly} onNew={(athlete) => setEvalTarget({ athlete, existing: null })} onOpenFile={(athlete) => setFileAthleteId(athlete.id)} onReport={(athlete) => setReportAthleteId(athlete.id)} />}{fileAthlete && <AthleteFile athlete={fileAthlete} category={category} sessions={current.sessions} evaluations={evaluations} readOnly={sync.readOnly} onNewEvaluation={() => setEvalTarget({ athlete: fileAthlete, existing: null })} onEditEvaluation={(evaluation) => setEvalTarget({ athlete: fileAthlete, existing: evaluation })} onDeleteEvaluation={deleteEvaluation} onReport={() => setReportAthleteId(fileAthlete.id)} onClose={() => setFileAthleteId('')} />}{evalTarget && <EvaluationForm athlete={evalTarget.athlete} existing={evalTarget.existing} previous={evalTarget.existing ? previousOf(evaluations, evalTarget.existing) : lastEvalOf(evalTarget.athlete.id)} evaluator={evaluator} today={todayIso()} onSave={saveEvaluation} onClose={() => setEvalTarget(null)} />}{reportAthlete && <ParentReport athlete={reportAthlete} category={category} clubName={sync.team?.name || data.teamName} coachName={sync.profileName} sessions={current.sessions} evaluations={evaluations} today={todayIso()} onClose={() => setReportAthleteId('')} />}{tab === 'calendar' && <CalendarTab events={current.events} onSaveDay={saveCalendarDay} onRemoveDay={removeCalendarDay} onStartScout={startScout} />}{tab === 'scout' && <ScoutTab mode={mode} setMode={setMode} scoutDay={scoutDay} onClearContext={() => setScoutDay(null)} onOpenCalendar={() => setTab('calendar')} athletes={current.athletes} activeAthlete={activeAthlete} stats={activeStats} onActive={setActiveAthleteId} onIncrement={increment} onReset={resetStats} onFinish={finishSession} />}{tab === 'performance' && <PerformanceTab category={category} athletes={current.athletes} sessions={current.sessions} onEdit={setEditing} onDelete={deleteSession} />}{editing && <SessionEditor session={editing} onSave={(stats) => updateSession(editing.id, stats)} onClose={() => setEditing(null)} />}{report && <ReportModal session={report} onClose={() => setReport(null)} onCopy={copyReport} onDownload={downloadReport} />}{syncPanel}{toast && <div className="toast"><Check size={16} /> {toast}</div>}</main>
 }
 
-function RosterTab({ athletes, activeId, onActive, onAdd, onRemove }: { athletes: Athlete[]; activeId: string; onActive: (id: string) => void; onAdd: (athlete: Athlete) => void; onRemove: (id: string) => void }) {
+function RosterTab({ athletes, activeId, onActive, onAdd, onRemove, onOpenFile }: { athletes: Athlete[]; activeId: string; onActive: (id: string) => void; onAdd: (athlete: Athlete) => void; onRemove: (id: string) => void; onOpenFile: (id: string) => void }) {
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ name: '', number: '', positions: '', age: '', height: '', weight: '', dominantFoot: 'Direita' as Foot })
   function submit(event: FormEvent) {
@@ -550,7 +598,7 @@ function RosterTab({ athletes, activeId, onActive, onAdd, onRemove }: { athletes
     setForm({ name: '', number: '', positions: '', age: '', height: '', weight: '', dominantFoot: 'Direita' })
     setAdding(false)
   }
-  return <section className="content-section"><div className="section-heading"><div><div className="eyebrow">GESTÃO DE ELENCO · PERFIL ESTENDIDO</div><h2>Quem está em campo?</h2><p>Dados físicos e táticos para contextualizar cada observação.</p></div><button className="primary-button" onClick={() => setAdding(!adding)} type="button"><Plus size={17} /> Novo atleta</button></div>{adding && <form className="form-card athlete-form" onSubmit={submit}><div className="form-heading"><div><strong>Novo perfil de atleta</strong><small>Nome, posição e medidas entram no cadastro da categoria.</small></div><button className="icon-button" onClick={() => setAdding(false)} type="button"><X size={17} /></button></div><div className="form-grid extended-form-grid"><label>Nome completo<input autoFocus required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Gabriel Silva" /></label><label>Nº camisa<input value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} placeholder="10" /></label><label>Posição de atuação<input required value={form.positions} onChange={(event) => setForm({ ...form, positions: event.target.value })} placeholder="Meia, Atacante" /></label><label>Idade<input type="number" min="10" max="40" value={form.age} onChange={(event) => setForm({ ...form, age: event.target.value })} placeholder="16" /></label><label>Altura (cm)<span className="input-with-icon"><Ruler size={14} /><input type="number" min="100" max="230" value={form.height} onChange={(event) => setForm({ ...form, height: event.target.value })} placeholder="178" /></span></label><label>Peso (kg)<span className="input-with-icon"><Scale size={14} /><input type="number" min="30" max="150" value={form.weight} onChange={(event) => setForm({ ...form, weight: event.target.value })} placeholder="72" /></span></label><label>Pé dominante<select value={form.dominantFoot} onChange={(event) => setForm({ ...form, dominantFoot: event.target.value as Foot })}>{FEET.map((foot) => <option key={foot}>{foot}</option>)}</select></label></div><button className="primary-button" type="submit">Adicionar ao elenco <ChevronRight size={17} /></button></form>}{athletes.length === 0 ? <EmptyState icon={Users} title="Seu elenco começa aqui" text="Cadastre o primeiro perfil para liberar o contexto físico e a seleção no Scout." action={<button className="secondary-button" onClick={() => setAdding(true)} type="button"><Plus size={16} /> Cadastrar atleta</button>} /> : <div className="athlete-list">{athletes.map((athlete) => <article className={`athlete-card ${activeId === athlete.id ? 'selected' : ''}`} key={athlete.id}><button className="athlete-main" onClick={() => onActive(athlete.id)} type="button"><span className="avatar">{athlete.name.slice(0, 1).toUpperCase()}</span><span className="athlete-copy"><strong>{athlete.name}</strong><small>{athlete.positions} · {athlete.age || '—'} anos · {athlete.height || '—'} cm · {athlete.weight || '—'} kg</small></span><span className="foot-chip" title={`Pé dominante: ${athlete.dominantFoot}`}>{athlete.dominantFoot === 'Direita' ? 'D' : athlete.dominantFoot === 'Esquerda' ? 'E' : 'A'}</span><span className="jersey">{athlete.number || '—'}</span></button><div className="athlete-actions">{activeId === athlete.id && <span className="active-label"><i /> ativo</span>}<button className="icon-button danger" onClick={() => onRemove(athlete.id)} type="button" aria-label={`Remover ${athlete.name}`}><Trash2 size={16} /></button></div></article>)}</div>}</section>
+  return <section className="content-section"><div className="section-heading"><div><div className="eyebrow">GESTÃO DE ELENCO · PERFIL ESTENDIDO</div><h2>Quem está em campo?</h2><p>Dados físicos e táticos para contextualizar cada observação.</p></div><button className="primary-button" onClick={() => setAdding(!adding)} type="button"><Plus size={17} /> Novo atleta</button></div>{adding && <form className="form-card athlete-form" onSubmit={submit}><div className="form-heading"><div><strong>Novo perfil de atleta</strong><small>Nome, posição e medidas entram no cadastro da categoria.</small></div><button className="icon-button" onClick={() => setAdding(false)} type="button"><X size={17} /></button></div><div className="form-grid extended-form-grid"><label>Nome completo<input autoFocus required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Gabriel Silva" /></label><label>Nº camisa <small className="optional">(opcional)</small><input value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} placeholder="10" /></label><label>Posição de atuação<input required value={form.positions} onChange={(event) => setForm({ ...form, positions: event.target.value })} placeholder="Meia, Atacante" /></label><label>Idade<input type="number" min="10" max="40" value={form.age} onChange={(event) => setForm({ ...form, age: event.target.value })} placeholder="16" /></label><label>Altura (cm)<span className="input-with-icon"><Ruler size={14} /><input type="number" min="100" max="230" value={form.height} onChange={(event) => setForm({ ...form, height: event.target.value })} placeholder="178" /></span></label><label>Peso (kg)<span className="input-with-icon"><Scale size={14} /><input type="number" min="30" max="150" value={form.weight} onChange={(event) => setForm({ ...form, weight: event.target.value })} placeholder="72" /></span></label><label>Pé dominante<select value={form.dominantFoot} onChange={(event) => setForm({ ...form, dominantFoot: event.target.value as Foot })}>{FEET.map((foot) => <option key={foot}>{foot}</option>)}</select></label></div><button className="primary-button" type="submit">Adicionar ao elenco <ChevronRight size={17} /></button></form>}{athletes.length === 0 ? <EmptyState icon={Users} title="Seu elenco começa aqui" text="Cadastre o primeiro perfil para liberar o contexto físico e a seleção no Scout." action={<button className="secondary-button" onClick={() => setAdding(true)} type="button"><Plus size={16} /> Cadastrar atleta</button>} /> : <div className="athlete-list">{athletes.map((athlete) => <article className={`athlete-card ${activeId === athlete.id ? 'selected' : ''}`} key={athlete.id}><button className="athlete-main" onClick={() => onActive(athlete.id)} type="button"><span className="avatar">{athlete.name.slice(0, 1).toUpperCase()}</span><span className="athlete-copy"><strong>{athlete.name}</strong><small>{athlete.positions} · {athlete.age || '—'} anos · {athlete.height || '—'} cm · {athlete.weight || '—'} kg</small></span><span className="foot-chip" title={`Pé dominante: ${athlete.dominantFoot}`}>{athlete.dominantFoot === 'Direita' ? 'D' : athlete.dominantFoot === 'Esquerda' ? 'E' : 'A'}</span><span className="jersey">{athlete.number || '—'}</span></button><div className="athlete-actions">{activeId === athlete.id && <span className="active-label"><i /> ativo</span>}<button className="secondary-button compact" onClick={() => onOpenFile(athlete.id)} type="button">Histórico</button><button className="icon-button danger" onClick={() => onRemove(athlete.id)} type="button" aria-label={`Remover ${athlete.name}`}><Trash2 size={16} /></button></div></article>)}</div>}</section>
 }
 
 function CalendarTab({ events, onSaveDay, onRemoveDay, onStartScout }: { events: CalendarEvent[]; onSaveDay: (event: CalendarEvent) => void; onRemoveDay: (id: string) => void; onStartScout: (event: CalendarEvent, mode: ScoutMode) => void }) {

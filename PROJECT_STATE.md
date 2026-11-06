@@ -79,3 +79,12 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - "Esqueci minha senha": envia link por e-mail; ao abrir, o app pede a senha nova.
 - Correção: `ensure_my_team` (RPC com trava por usuário) impede criar dois times no primeiro login.
 - E-mail: o servidor padrão do Supabase envia só 2 e-mails por hora e só para endereços da equipe da organização no Supabase. Para a comissão receber confirmação de cadastro e redefinição de senha, configure SMTP próprio (Authentication → Emails → SMTP Settings).
+
+## v3.0 · Login, perfil com clubes, avaliações, histórico e relatório para os pais
+
+- Fluxo: tela de login → perfil (nome do treinador + clubes) → categorias do clube → hub da categoria.
+- Limites internos (não exibidos na interface): até 10 clubes administrados por usuário e até 100 atletas por categoria em cada clube. Validados no app e no banco (triggers).
+- Número da camisa é opcional no cadastro.
+- Avaliações periódicas: notas de 1 a 5 em 11 critérios (técnico, tático, físico, comportamental), pontos fortes, o que está sendo trabalhado, metas e mensagem para os pais. Sugestão de reavaliação a cada 30 dias, com atletas pendentes destacados. Tabela `athlete_evaluations`.
+- Histórico do atleta: média da última avaliação e tendência, área por área contra a avaliação anterior, gráfico da média ao longo do tempo, precisão de passe nos jogos e linha do tempo com avaliações e sessões de scout.
+- Relatório para os pais: linguagem simples, notas em estrelas com "evoluiu/manteve/caiu", pontos fortes e metas, números de campo do período e mensagem do treinador. Imprimir/salvar PDF, WhatsApp ou copiar texto.

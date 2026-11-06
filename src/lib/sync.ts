@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AppData, Athlete, CalendarEvent, CategoryId, Foot, SessionRecord } from '../types'
+import type { AppData, Athlete, CalendarEvent, CategoryId, Evaluation, Foot, SessionRecord } from '../types'
 import { CATEGORIES } from '../types'
 
 /**
@@ -11,7 +11,7 @@ import { CATEGORIES } from '../types'
  */
 
 type Row = Record<string, unknown>
-export type RemoteRows = { athletes: Row[]; events: Row[]; sessions: Row[]; teamName: string | null }
+export type RemoteRows = { athletes: Row[]; events: Row[]; sessions: Row[]; evaluations: Row[]; teamName: string | null }
 
 const time = (value: unknown) => {
   const parsed = Date.parse(String(value ?? ''))
@@ -49,6 +49,16 @@ export function sessionRow(teamId: string, s: SessionRecord): Row {
   }
 }
 
+export function evaluationRow(teamId: string, category: CategoryId, e: Evaluation): Row {
+  const scores: Record<string, number> = {}
+  for (const [key, value] of Object.entries(e.scores)) if (typeof value === 'number' && value >= 1 && value <= 5) scores[key] = value
+  return {
+    team_id: teamId, id: e.id, category, athlete_id: e.athleteId, athlete_name: e.athleteName, date: e.date, period: e.period, scores,
+    strengths: e.strengths, improvements: e.improvements, goals: e.goals, coach_note: e.coachNote, evaluator: e.evaluator,
+    created_at: e.createdAt, updated_at: e.updatedAt, deleted_at: null,
+  }
+}
+
 /* ---------- linha -> entidade ---------- */
 
 const str = (value: unknown) => (value === null || value === undefined ? '' : String(value))
@@ -79,6 +89,17 @@ export function rowSession(r: Row): SessionRecord {
   }
 }
 
+export function rowEvaluation(r: Row): Evaluation {
+  const raw = (r.scores && typeof r.scores === 'object' ? r.scores : {}) as Record<string, unknown>
+  const scores: Record<string, number> = {}
+  for (const [key, value] of Object.entries(raw)) { const n = Number(value); if (n >= 1 && n <= 5) scores[key] = n }
+  return {
+    id: str(r.id), athleteId: str(r.athlete_id), athleteName: str(r.athlete_name), date: str(r.date).slice(0, 10), period: str(r.period), scores,
+    strengths: str(r.strengths), improvements: str(r.improvements), goals: str(r.goals), coachNote: str(r.coach_note), evaluator: str(r.evaluator),
+    createdAt: new Date(time(r.created_at)).toISOString(), updatedAt: new Date(time(r.updated_at)).toISOString(),
+  }
+}
+
 /* ---------- impressão para detectar mudanças ---------- */
 
 export const fingerprint = (row: Row) => JSON.stringify(row)
@@ -86,12 +107,13 @@ export const rowKey = (table: string, id: string) => `${table}:${id}`
 
 /** Todas as linhas que este aparelho tem hoje, com a chave de cada uma. */
 export function localRows(teamId: string, data: AppData) {
-  const out: Array<{ table: 'athletes' | 'calendar_events' | 'scout_sessions'; key: string; row: Row }> = []
+  const out: Array<{ table: 'athletes' | 'calendar_events' | 'scout_sessions' | 'athlete_evaluations'; key: string; row: Row }> = []
   for (const category of CATEGORIES) {
     const c = data.categories[category]
     c.athletes.forEach((a) => out.push({ table: 'athletes', key: rowKey('athletes', a.id), row: athleteRow(teamId, category, a) }))
     c.events.forEach((e) => out.push({ table: 'calendar_events', key: rowKey('calendar_events', e.id), row: eventRow(teamId, category, e) }))
     c.sessions.forEach((s) => out.push({ table: 'scout_sessions', key: rowKey('scout_sessions', s.id), row: sessionRow(teamId, { ...s, category }) }))
+    ;(c.evaluations ?? []).forEach((e) => out.push({ table: 'athlete_evaluations', key: rowKey('athlete_evaluations', e.id), row: evaluationRow(teamId, category, e) }))
   }
   return out
 }
@@ -107,7 +129,7 @@ export function mergeRemote(local: AppData, remote: RemoteRows, teamId: string):
   const fromServer = new Map<string, string>()
   const pendingDelete = new Set(local.tombstones.map((t) => `${t.kind}:${t.id}`))
 
-  type Spec<T extends { id: string }> = { rows: Row[]; kind: 'athlete' | 'event' | 'session'; table: string; list: (c: CategoryId) => T[]; set: (c: CategoryId, items: T[]) => void; toEntity: (r: Row) => T; localTime: (item: T) => number; toRow: (c: CategoryId, item: T) => Row }
+  type Spec<T extends { id: string }> = { rows: Row[]; kind: 'athlete' | 'event' | 'session' | 'evaluation'; table: string; list: (c: CategoryId) => T[]; set: (c: CategoryId, items: T[]) => void; toEntity: (r: Row) => T; localTime: (item: T) => number; toRow: (c: CategoryId, item: T) => Row }
 
   function apply<T extends { id: string }>(spec: Spec<T>) {
     for (const r of spec.rows) {
@@ -139,6 +161,8 @@ export function mergeRemote(local: AppData, remote: RemoteRows, teamId: string):
   apply<CalendarEvent>({ rows: remote.events, kind: 'event', table: 'calendar_events', list: (c) => cat(c).events, set: (c, items) => setCat(c, { events: [...items].sort((a, b) => a.date.localeCompare(b.date)) }), toEntity: rowEvent, localTime: (e) => time(e.updatedAt), toRow: (c, e) => eventRow(teamId, c, e) })
   apply<SessionRecord>({ rows: remote.sessions, kind: 'session', table: 'scout_sessions', list: (c) => cat(c).sessions, set: (c, items) => setCat(c, { sessions: [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }), toEntity: rowSession, localTime: (s) => time(s.updatedAt ?? s.createdAt), toRow: (_c, s) => sessionRow(teamId, s) })
 
+  apply<Evaluation>({ rows: remote.evaluations, kind: 'evaluation', table: 'athlete_evaluations', list: (c) => cat(c).evaluations ?? [], set: (c, items) => setCat(c, { evaluations: [...items].sort((a, b) => a.date.localeCompare(b.date)) }), toEntity: rowEvaluation, localTime: (e) => time(e.updatedAt), toRow: (c, e) => evaluationRow(teamId, c, e) })
+
   if (remote.teamName && !local.teamName) data.teamName = remote.teamName
   return { data, fromServer }
 }
@@ -149,6 +173,26 @@ export type Role = 'admin' | 'treinador' | 'analista' | 'leitura'
 export type TeamInfo = { id: string; name: string; role: Role }
 export type Member = { userId: string; email: string; role: Role; joinedAt: string }
 export type Invite = { id: string; code: string; role: Role; createdAt: string; expiresAt: string; usedAt: string | null }
+
+export type Club = TeamInfo & { athletes: number; sessions: number; evaluations: number }
+
+export async function listMyClubs(client: SupabaseClient): Promise<Club[]> {
+  const { data, error } = await client.rpc('my_clubs')
+  if (error) throw error
+  return ((data ?? []) as Array<{ team_id: string; name: string; role: Role; athletes: number; sessions: number; evaluations: number }>).map((t) => ({ id: t.team_id, name: t.name, role: t.role, athletes: Number(t.athletes), sessions: Number(t.sessions), evaluations: Number(t.evaluations) }))
+}
+
+export async function canCreateClub(client: SupabaseClient): Promise<boolean> {
+  const { data, error } = await client.rpc('can_create_club')
+  if (error) throw error
+  return Boolean(data)
+}
+
+export async function createClub(client: SupabaseClient, name: string): Promise<string> {
+  const { data, error } = await client.from('teams').insert({ name: name.trim() || 'Meu clube' }).select('id').single()
+  if (error) throw error
+  return (data as { id: string }).id
+}
 
 export async function listMyTeams(client: SupabaseClient): Promise<TeamInfo[]> {
   const { data, error } = await client.rpc('my_teams')
@@ -207,14 +251,15 @@ function toInvite(r: Row): Invite {
 }
 
 export async function pullTeam(client: SupabaseClient, teamId: string): Promise<RemoteRows> {
-  const [athletes, events, sessions, team] = await Promise.all([
+  const [athletes, events, sessions, evaluations, team] = await Promise.all([
     client.from('athletes').select('*').eq('team_id', teamId),
     client.from('calendar_events').select('*').eq('team_id', teamId),
     client.from('scout_sessions').select('*').eq('team_id', teamId),
+    client.from('athlete_evaluations').select('*').eq('team_id', teamId),
     client.from('teams').select('name').eq('id', teamId).maybeSingle(),
   ])
-  for (const result of [athletes, events, sessions, team]) if (result.error) throw result.error
-  return { athletes: athletes.data ?? [], events: events.data ?? [], sessions: (sessions.data ?? []).map(({ passes_total: _ignored, ...rest }) => rest), teamName: (team.data as { name?: string } | null)?.name ?? null }
+  for (const result of [athletes, events, sessions, evaluations, team]) if (result.error) throw result.error
+  return { athletes: athletes.data ?? [], events: events.data ?? [], evaluations: evaluations.data ?? [], sessions: (sessions.data ?? []).map(({ passes_total: _ignored, ...rest }) => rest), teamName: (team.data as { name?: string } | null)?.name ?? null }
 }
 
 /** Envia o que mudou. Devolve as impressões atualizadas e quantos tombstones foram aplicados. */
@@ -228,7 +273,7 @@ export async function pushChanges(client: SupabaseClient, teamId: string, data: 
     byTable.set(item.table, [...(byTable.get(item.table) ?? []), item.row])
     keysByTable.set(item.table, [...(keysByTable.get(item.table) ?? []), [item.key, print]])
   }
-  for (const table of ['athletes', 'calendar_events', 'scout_sessions']) {
+  for (const table of ['athletes', 'calendar_events', 'scout_sessions', 'athlete_evaluations']) {
     const rows = byTable.get(table)
     if (!rows?.length) continue
     for (let i = 0; i < rows.length; i += 200) {
@@ -237,7 +282,7 @@ export async function pushChanges(client: SupabaseClient, teamId: string, data: 
     }
     keysByTable.get(table)!.forEach(([key, print]) => { next[key] = print })
   }
-  const tableOf = { athlete: 'athletes', event: 'calendar_events', session: 'scout_sessions' } as const
+  const tableOf = { athlete: 'athletes', event: 'calendar_events', session: 'scout_sessions', evaluation: 'athlete_evaluations' } as const
   const applied: string[] = []
   for (const t of data.tombstones) {
     const { error } = await client.from(tableOf[t.kind]).update({ deleted_at: t.deletedAt, updated_at: t.deletedAt }).eq('team_id', teamId).eq('id', t.id)

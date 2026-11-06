@@ -3,8 +3,8 @@ import type { Session } from '@supabase/supabase-js'
 import { type AppData, emptyAppData } from '../types'
 import { supabase } from '../lib/supabase'
 import {
-  type Invite, type Member, type Role, type TeamInfo,
-  acceptInvite, createInvite, ensureMyTeam, listInvites, listMembers, listMyTeams, mergeRemote, pullTeam, pushChanges,
+  type Club, type Invite, type Member, type Role, type TeamInfo,
+  acceptInvite, canCreateClub, createClub, createInvite, listInvites, listMembers, listMyClubs, mergeRemote, pullTeam, pushChanges,
   pushTeamName, removeMember, revokeInvite, setMemberRole,
 } from '../lib/sync'
 
@@ -12,7 +12,7 @@ export type SyncStatus = 'disabled' | 'signed-out' | 'syncing' | 'synced' | 'off
 
 const SYNC_KEY = 'actionlog_sync_v1'
 const INVITE_KEY = 'actionlog_pending_invite'
-type Saved = { userId: string; teamId: string; pushed: Record<string, string>; lastSyncAt: string; pushedTeamName: string }
+type Saved = { userId: string; teamId: string; pushed: Record<string, string>; lastSyncAt: string; pushedTeamName: string; clubs: Club[] }
 
 function readSaved(): Partial<Saved> {
   try { return JSON.parse(window.localStorage.getItem(SYNC_KEY) ?? '{}') as Partial<Saved> } catch { return {} }
@@ -46,7 +46,9 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
   const [status, setStatus] = useState<SyncStatus>(supabase ? 'signed-out' : 'disabled')
   const [error, setError] = useState('')
   const [team, setTeam] = useState<TeamInfo | null>(null)
-  const [teams, setTeams] = useState<TeamInfo[]>([])
+  const [clubs, setClubs] = useState<Club[]>(() => readSaved().clubs ?? [])
+  const [canCreate, setCanCreate] = useState(true)
+  const [clubsLoaded, setClubsLoaded] = useState(false)
   const [pendingInvite, setPendingInvite] = useState(() => captureInviteFromUrl())
   const [inviteError, setInviteError] = useState('')
   const [recovery, setRecovery] = useState(false)
@@ -62,7 +64,7 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
     supabase.auth.getSession().then(({ data: result }) => setSession(result.session))
     const { data: listener } = supabase.auth.onAuthStateChange((event, next) => {
       if (event === 'PASSWORD_RECOVERY') setRecovery(true)
-      setSession((current) => (current?.user.id === next?.user.id && current?.access_token === next?.access_token ? current : next))
+      setSession(next)
     })
     return () => listener.subscription.unsubscribe()
   }, [])
@@ -132,47 +134,53 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
     await push()
   }, [team, setData, push])
 
-  const refreshTeams = useCallback(async () => {
-    if (!supabase) return []
-    const list = await listMyTeams(supabase)
-    setTeams(list)
-    return list
+  const refreshClubs = useCallback(async () => {
+    if (!supabase) return [] as Club[]
+    try {
+      const [list, allowed] = await Promise.all([listMyClubs(supabase), canCreateClub(supabase)])
+      setClubs(list)
+      setCanCreate(allowed)
+      persist({ clubs: list })
+      setClubsLoaded(true)
+      return list
+    } catch (err) {
+      fail(err)
+      setClubsLoaded(true)
+      return saved.current.clubs ?? []
+    }
   }, [])
 
-  // Ao entrar: aceita convite pendente, senão volta ao último time usado, senão cria o primeiro.
+  /** Abre um clube. Se o aparelho tinha dados de outro clube, começa do zero e baixa os deste. */
+  const enterClub = useCallback((id: string, list?: Club[]) => {
+    const club = (list ?? clubs).find((c) => c.id === id)
+    if (!club) return
+    if (saved.current.teamId && saved.current.teamId !== id) {
+      persist({ pushed: {}, pushedTeamName: '' })
+      dataRef.current = emptyAppData(club.name)
+      setData(() => dataRef.current)
+    }
+    persist({ teamId: id })
+    setTeam({ id: club.id, name: club.name, role: club.role })
+  }, [clubs, setData])
+
+  // Ao entrar na conta: aceita convite pendente (e abre esse clube) e carrega a lista de clubes.
   useEffect(() => {
     if (!supabase) return
-    if (!session) { setTeam(null); setTeams([]); setStatus('signed-out'); return }
+    if (!session) { setTeam(null); setClubsLoaded(false); setStatus('signed-out'); return }
     let cancelled = false
     ;(async () => {
-      try {
-        setStatus('syncing')
-        if (saved.current.userId !== session.user.id) persist({ userId: session.user.id, teamId: '', pushed: {}, pushedTeamName: '' })
-        let targetId = ''
-        const code = pendingInvite
-        if (code) {
-          try {
-            targetId = await acceptInvite(supabase!, code)
-            setInviteError('')
-          } catch (err) { setInviteError(errorText(err)) }
-          try { window.sessionStorage.removeItem(INVITE_KEY) } catch { /* ignora */ }
-          setPendingInvite('')
-        }
-        let list = await listMyTeams(supabase!)
-        if (!targetId) targetId = list.find((t) => t.id === saved.current.teamId)?.id ?? list[0]?.id ?? ''
-        if (!targetId) { targetId = await ensureMyTeam(supabase!, dataRef.current.teamName); list = await listMyTeams(supabase!) }
-        if (cancelled) return
-        setTeams(list)
-        const chosen = list.find((t) => t.id === targetId)!
-        if (saved.current.teamId && saved.current.teamId !== chosen.id) {
-          // Entrou em outro time (ex.: convite): o aparelho passa a mostrar só os dados desse time.
-          persist({ pushed: {}, pushedTeamName: '' })
-          dataRef.current = emptyAppData(chosen.name)
-          setData(() => dataRef.current)
-        }
-        persist({ teamId: chosen.id })
-        setTeam(chosen)
-      } catch (err) { if (!cancelled) fail(err) }
+      if (saved.current.userId && saved.current.userId !== session.user.id) persist({ userId: session.user.id, teamId: '', pushed: {}, pushedTeamName: '', clubs: [] })
+      else persist({ userId: session.user.id })
+      let joined = ''
+      if (pendingInvite) {
+        try { joined = await acceptInvite(supabase!, pendingInvite); setInviteError('') } catch (err) { setInviteError(errorText(err)) }
+        try { window.sessionStorage.removeItem(INVITE_KEY) } catch { /* ignora */ }
+        setPendingInvite('')
+      }
+      const list = await refreshClubs()
+      if (cancelled) return
+      setStatus('synced')
+      if (joined) enterClub(joined, list)
     })()
     return () => { cancelled = true }
   }, [session?.user.id])
@@ -196,33 +204,39 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
     return () => { window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh); window.clearInterval(interval) }
   }, [team?.id, pull])
 
-  /** Troca de time: envia o que falta do time atual e carrega o outro do zero. */
-  const switchTeam = async (id: string) => {
-    if (!team || id === team.id) return
-    const next = teams.find((t) => t.id === id)
-    if (!next) return
+  /** Volta para a lista de clubes: envia o que falta antes de sair. */
+  const leaveClub = async () => {
     await push()
-    persist({ teamId: id, pushed: {}, pushedTeamName: '' })
-    dataRef.current = emptyAppData(next.name)
-    setData(() => dataRef.current)
-    setTeam(next)
+    setTeam(null)
+    void refreshClubs()
+  }
+
+  const newClub = async (name: string) => {
+    if (!supabase) return 'Indisponível.'
+    try {
+      const id = await createClub(supabase, name)
+      const list = await refreshClubs()
+      enterClub(id, list)
+      return ''
+    } catch (err) { return errorText(err) }
   }
 
   const joinWithCode = async (code: string) => {
     if (!supabase || !session) return 'Entre primeiro.'
     try {
+      await push()
       const id = await acceptInvite(supabase, code)
-      const list = await refreshTeams()
-      const next = list.find((t) => t.id === id)
-      if (next && next.id !== team?.id) {
-        await push()
-        persist({ teamId: id, pushed: {}, pushedTeamName: '' })
-        dataRef.current = emptyAppData(next.name)
-        setData(() => dataRef.current)
-        setTeam(next)
-      }
+      const list = await refreshClubs()
+      enterClub(id, list)
       return ''
     } catch (err) { return errorText(err) }
+  }
+
+  const profileName = String((session?.user.user_metadata as { full_name?: string } | undefined)?.full_name ?? '')
+  const setProfileName = async (name: string) => {
+    if (!supabase) return 'Indisponível.'
+    const { error: err } = await supabase.auth.updateUser({ data: { full_name: name.trim() } })
+    return err ? friendlyAuthError(err.message) : ''
   }
 
   const signIn = async (email: string, password: string) => {
@@ -270,9 +284,9 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
   }
 
   return {
-    enabled: Boolean(supabase), session, status, error, team, teams, readOnly, lastSyncAt, pendingInvite, inviteError,
-    recovery, dismissRecovery: () => setRecovery(false),
-    syncNow: () => pull(), switchTeam, joinWithCode, refreshTeams, signIn, signUp, signOut, requestPasswordReset, setNewPassword, team$,
+    enabled: Boolean(supabase), session, status, error, team, clubs, clubsLoaded, canCreate, readOnly, lastSyncAt, pendingInvite, inviteError,
+    recovery, dismissRecovery: () => setRecovery(false), profileName, setProfileName,
+    syncNow: () => pull(), enterClub, leaveClub, newClub, joinWithCode, refreshClubs, signIn, signUp, signOut, requestPasswordReset, setNewPassword, team$,
   }
 }
 
