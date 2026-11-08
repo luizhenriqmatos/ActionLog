@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Activity,
   ArrowLeft,
@@ -164,6 +164,8 @@ function formatDayMonth(date: string) {
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
+
+const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 function monthTitle(date: Date) {
   return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(date).replace(/^./, (letter) => letter.toUpperCase())
@@ -375,6 +377,44 @@ function App() {
   const [evalTarget, setEvalTarget] = useState<{ athlete: Athlete; existing: Evaluation | null } | null>(null)
   const [fileAthleteId, setFileAthleteId] = useState('')
   const [reportAthleteId, setReportAthleteId] = useState('')
+
+  // ---------- botão "voltar" do celular e do navegador ----------
+  // Cada nível aberto (clube, categoria, janela) vira uma entrada no histórico.
+  // Voltar fecha a janela de cima ou sobe um nível, em vez de sair do app.
+  const modalCount = [syncOpen, editing, report, evalTarget, fileAthleteId, reportAthleteId].filter(Boolean).length
+  const depth = (sync.team ? 1 : 0) + (category ? 1 : 0) + modalCount
+  const prevDepth = useRef(depth)
+  const skipPops = useRef(0)
+  const browserPop = useRef(false)
+  const goUp = useRef<() => void>(() => {})
+  goUp.current = () => {
+    if (reportAthleteId) setReportAthleteId('')
+    else if (evalTarget) setEvalTarget(null)
+    else if (fileAthleteId) setFileAthleteId('')
+    else if (editing) setEditing(null)
+    else if (report) setReport(null)
+    else if (syncOpen) setSyncOpen(false)
+    else if (category) setCategory(null)
+    else if (sync.team) void sync.leaveClub()
+  }
+  useEffect(() => {
+    const previous = prevDepth.current
+    if (depth > previous) for (let level = previous; level < depth; level += 1) window.history.pushState({ actionlog: level + 1 }, '')
+    else if (depth < previous) {
+      if (browserPop.current) browserPop.current = false
+      else { skipPops.current += 1; window.history.go(depth - previous) }
+    }
+    prevDepth.current = depth
+  }, [depth])
+  useEffect(() => {
+    const onPop = () => {
+      if (skipPops.current > 0) { skipPops.current -= 1; return }
+      browserPop.current = true
+      goUp.current()
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
   const syncPanel = syncOpen ? <SyncPanel sync={sync} onClose={() => setSyncOpen(false)} /> : null
 
   useEffect(() => {
@@ -585,7 +625,7 @@ function App() {
   const reportAthlete = current.athletes.find((a) => a.id === reportAthleteId)
   const lastEvalOf = (athleteId: string) => evaluations.filter((e) => e.athleteId === athleteId).sort((a, b) => a.date.localeCompare(b.date)).pop() ?? null
 
-  return <main className={`app-shell hub-${tab}`}><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button"><ArrowLeft size={18} /> Categorias</button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-status"><i /> <span className="hs-team">{data.teamName || 'Meu time'}</span> <span className="slash">/</span> {category}</div>{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub">{([
+  return <main className={`app-shell hub-${tab}`}><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button" aria-label="Voltar para as categorias"><span className="back-icon"><ArrowLeft size={18} /></span><span className="back-text">Categorias</span></button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-context"><span className="hs-team">{data.teamName || 'Meu time'}</span><label className="sr-only" htmlFor="category-switch">Trocar categoria</label><select id="category-switch" className="chip-select category-switch" value={category} onChange={(event) => { const keep = tab; selectCategory(event.target.value as CategoryId); setTab(keep) }}>{CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub">{([
   ['roster', Users, 'Elenco', 'Elenco', current.athletes.length],
   ['calendar', CalendarDays, 'Calendário MD', 'Agenda', current.events.length],
   ['scout', BarChart3, 'Central de Scout', 'Scout', current.sessions.length],
@@ -622,6 +662,16 @@ function CalendarTab({ events, onSaveDay, onRemoveDay, onStartScout }: { events:
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => toIsoDate(addDays(weekStart(cursor), index))), [cursor])
   const visibleDates = view === 'month' ? monthDays : weekDays
   const calendarTitle = view === 'month' ? monthTitle(cursor) : `${formatDate(weekDays[0])} — ${formatDate(weekDays[6])}`
+  // Ano: sempre abre no ano atual; o seletor oferece 5 anos para trás e para frente, mais qualquer ano com compromisso.
+  const thisYear = new Date().getFullYear()
+  const years = useMemo(() => {
+    const set = new Set<number>()
+    for (let year = thisYear - 5; year <= thisYear + 5; year += 1) set.add(year)
+    events.forEach((event) => { const year = Number(event.date.slice(0, 4)); if (year) set.add(year) })
+    set.add(cursor.getFullYear())
+    return [...set].sort((a, b) => a - b)
+  }, [events, cursor, thisYear])
+  const jumpTo = (year: number, month: number) => setCursor(new Date(year, month, 1))
 
   function moveCursor(amount: number) {
     setCursor((current) => view === 'month' ? new Date(current.getFullYear(), current.getMonth() + amount, 1) : addDays(current, amount * 7))
@@ -635,13 +685,13 @@ function CalendarTab({ events, onSaveDay, onRemoveDay, onStartScout }: { events:
     onSaveDay({ ...form, id: selectedEvent?.id ?? uid('calendar') })
   }
 
-  return <section className="content-section calendar-section"><div className="section-heading"><div><div className="eyebrow">PERIODIZAÇÃO · MATCH DAY</div><h2>Semana com intenção.</h2><p>Classifique cada data como MD, MD-1, MD-2 e abra o Scout no contexto certo.</p></div><div className="calendar-legend"><span><i className="legend-dot md" /> MD · jogo</span><span><i className="legend-dot prep" /> preparação</span></div></div><div className="calendar-toolbar"><div className="calendar-nav"><button className="icon-button" onClick={() => moveCursor(-1)} type="button" aria-label="Período anterior"><ChevronLeft size={17} /></button><strong>{calendarTitle}</strong><button className="icon-button" onClick={() => moveCursor(1)} type="button" aria-label="Próximo período"><ChevronRight size={17} /></button><button className="today-button" onClick={() => { setCursor(new Date()); setSelectedDate(todayIso()) }} type="button">Hoje</button></div><div className="view-switch"><button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')} type="button"><LayoutGrid size={15} /> Mês</button><button className={view === 'week' ? 'active' : ''} onClick={() => setView('week')} type="button"><CalendarDays size={15} /> Semana</button></div></div><div className={`calendar-workspace ${selectedDate ? 'has-selection' : ''}`}><div className="calendar-card"><div className="weekday-row">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div><div className={`calendar-grid ${view === 'week' ? 'week-grid' : ''}`}>{visibleDates.map((date, index) => date ? <CalendarCell key={date} date={date} event={eventByDate.get(date)} selected={selectedDate === date} onSelect={selectDate} /> : <div className="calendar-empty" key={`empty-${index}`} />)}</div></div>{selectedDate && <DayPanel date={selectedDate} event={selectedEvent} onSave={saveDay} onRemove={onRemoveDay} onStartScout={onStartScout} />}</div>{events.length > 0 && <div className="calendar-footnote"><Tag size={15} /><span>{events.length} datas classificadas · clique em qualquer data para editar a etiqueta de periodização e abrir a sessão.</span></div>}</section>
+  return <section className="content-section calendar-section"><div className="section-heading"><div><div className="eyebrow">PERIODIZAÇÃO · MATCH DAY</div><h2>Semana com intenção.</h2><p>Classifique cada data como MD, MD-1, MD-2 e abra o Scout no contexto certo.</p></div><div className="calendar-legend"><span><i className="legend-dot md" /> MD · jogo</span><span><i className="legend-dot prep" /> preparação</span></div></div><div className="calendar-toolbar"><div className="calendar-nav"><button className="icon-button" onClick={() => moveCursor(-1)} type="button" aria-label="Período anterior"><ChevronLeft size={17} /></button><div className="calendar-pickers"><label className="sr-only" htmlFor="cal-month">Mês</label><select id="cal-month" className="chip-select" value={cursor.getMonth()} onChange={(event) => jumpTo(cursor.getFullYear(), Number(event.target.value))}>{MONTHS.map((name, index) => <option key={name} value={index}>{name}</option>)}</select><label className="sr-only" htmlFor="cal-year">Ano</label><select id="cal-year" className="chip-select" value={cursor.getFullYear()} onChange={(event) => jumpTo(Number(event.target.value), cursor.getMonth())}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select>{view === 'week' && <small className="calendar-week-label">{calendarTitle}</small>}</div><button className="icon-button" onClick={() => moveCursor(1)} type="button" aria-label="Próximo período"><ChevronRight size={17} /></button><button className="today-button" onClick={() => { setCursor(new Date()); setSelectedDate(todayIso()) }} type="button">Hoje</button></div><div className="view-switch"><button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')} type="button"><LayoutGrid size={15} /> Mês</button><button className={view === 'week' ? 'active' : ''} onClick={() => setView('week')} type="button"><CalendarDays size={15} /> Semana</button></div></div><div className={`calendar-workspace ${selectedDate ? 'has-selection' : ''}`}><div className="calendar-card"><div className="weekday-row">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div><div className={`calendar-grid ${view === 'week' ? 'week-grid' : ''}`}>{visibleDates.map((date, index) => date ? <CalendarCell key={date} date={date} event={eventByDate.get(date)} selected={selectedDate === date} onSelect={selectDate} /> : <div className="calendar-empty" key={`empty-${index}`} />)}</div></div>{selectedDate && <DayPanel date={selectedDate} event={selectedEvent} onSave={saveDay} onRemove={onRemoveDay} onStartScout={onStartScout} />}</div>{events.length > 0 && <div className="calendar-footnote"><Tag size={15} /><span>{events.length} datas classificadas · clique em qualquer data para editar a etiqueta de periodização e abrir a sessão.</span></div>}</section>
 }
 
 function CalendarCell({ date, event, selected, onSelect }: { date: string; event?: CalendarEvent; selected: boolean; onSelect: (date: string) => void }) {
   const dayNumber = fromIsoDate(date).getDate()
   const isToday = date === todayIso()
-  return <button className={`calendar-cell ${selected ? 'selected' : ''} ${isToday ? 'today' : ''} ${event ? 'has-event' : ''}`} onClick={() => onSelect(date)} type="button"><span className="calendar-day-number">{dayNumber}</span>{event ? <span className={`calendar-event-pill ${event.mdTag === 'MD' ? 'match' : 'prep'}`}><b>{event.mdTag || '—'}</b><small>{event.title}</small></span> : <span className="calendar-empty-hint">classificar</span>}</button>
+  return <button className={`calendar-cell ${selected ? 'selected' : ''} ${isToday ? 'today' : ''} ${event ? `has-event ${event.mdTag === 'MD' ? 'is-match' : 'is-prep'}` : ''}`} onClick={() => onSelect(date)} type="button"><span className="calendar-day-number">{dayNumber}</span>{event ? <span className={`calendar-event-pill ${event.mdTag === 'MD' ? 'match' : 'prep'}`}><b>{event.mdTag || '—'}</b><small>{event.title}</small></span> : <span className="calendar-empty-hint">classificar</span>}</button>
 }
 
 function DayPanel({ date, event, onSave, onRemove, onStartScout }: { date: string; event?: CalendarEvent; onSave: (event: Omit<CalendarEvent, 'id'>) => void; onRemove: (id: string) => void; onStartScout: (event: CalendarEvent, mode: ScoutMode) => void }) {

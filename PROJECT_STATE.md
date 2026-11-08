@@ -88,3 +88,10 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Avaliações periódicas: notas de 1 a 5 em 11 critérios (técnico, tático, físico, comportamental), pontos fortes, o que está sendo trabalhado, metas e mensagem para os pais. Sugestão de reavaliação a cada 30 dias, com atletas pendentes destacados. Tabela `athlete_evaluations`.
 - Histórico do atleta: média da última avaliação e tendência, área por área contra a avaliação anterior, gráfico da média ao longo do tempo, precisão de passe nos jogos e linha do tempo com avaliações e sessões de scout.
 - Relatório para os pais: linguagem simples, notas em estrelas com "evoluiu/manteve/caiu", pontos fortes e metas, números de campo do período e mensagem do treinador. Imprimir/salvar PDF, WhatsApp ou copiar texto.
+
+## v4.0 — novo visual e navegação (2026-11-07)
+- Visual grafite com acentos pastel (azul #a9d9f5 ação principal, rosa jogo, verde ok), fonte Plus Jakarta Sans, tokens de cor em `:root`.
+- Botões: tamanhos padronizados (48px), primário azul com texto escuro, secundário em superfície, ícones em quadrado arredondado de 44px, efeito de toque e foco visível.
+- Navegação: botão "voltar" do celular/navegador fecha janelas e volta níveis (clube › categoria › aba); seletor de categoria no topo mantém a aba atual; dock flutuante no mobile.
+- Calendário: seletores de mês e ano (ano atual por padrão; ±5 anos e anos com eventos); células listradas para dias de jogo.
+- Deploy: `vercel.json` adicionado (Vite + pnpm, rota SPA). Netlify continua ativo.
