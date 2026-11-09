@@ -51,16 +51,20 @@ export const SECTORS: Array<{ id: Sector; label: string }> = [
 ]
 
 /** Ações individuais na ordem dos botões, com o contador do scout que cada uma alimenta. */
+/**
+ * Ações individuais na ordem dos botões: das mais frequentes num jogo (passe, desarme) às raras (gol, falta),
+ * para o dedo achar rápido as que mais se repetem. Gol fica ao lado de "No gol" e longe do primeiro toque.
+ */
 export const PLAYER_ACTIONS: Array<{ kind: PlayerAction; metric: GameMetric; label: string; short: string; tone: string }> = [
-  { kind: 'goal', metric: 'goals', label: 'Gol', short: 'Gol', tone: 'yellow' },
-  { kind: 'assist', metric: 'assists', label: 'Assistência', short: 'Assist.', tone: 'yellow' },
-  { kind: 'shot', metric: 'shots', label: 'Finalização', short: 'Final.', tone: 'blue' },
-  { kind: 'shot_on_target', metric: 'shotsOnTarget', label: 'Finalização no gol', short: 'No gol', tone: 'blue' },
   { kind: 'pass_ok', metric: 'accuratePasses', label: 'Passe certo', short: 'Passe ✓', tone: 'green' },
   { kind: 'pass_bad', metric: 'wrongPasses', label: 'Passe errado', short: 'Passe ✗', tone: 'red' },
   { kind: 'tackle', metric: 'tackles', label: 'Desarme', short: 'Desarme', tone: 'purple' },
   { kind: 'interception', metric: 'interceptions', label: 'Interceptação', short: 'Intercep.', tone: 'purple' },
   { kind: 'possession_loss', metric: 'possessionLoss', label: 'Perda de posse', short: 'Perda', tone: 'orange' },
+  { kind: 'shot', metric: 'shots', label: 'Finalização', short: 'Final.', tone: 'blue' },
+  { kind: 'shot_on_target', metric: 'shotsOnTarget', label: 'Finalização no gol', short: 'No gol', tone: 'blue' },
+  { kind: 'goal', metric: 'goals', label: 'Gol', short: 'Gol', tone: 'yellow' },
+  { kind: 'assist', metric: 'assists', label: 'Assistência', short: 'Assist.', tone: 'yellow' },
   { kind: 'foul_committed', metric: 'foulsCommitted', label: 'Falta cometida', short: 'Falta com.', tone: 'red' },
   { kind: 'foul_suffered', metric: 'foulsSuffered', label: 'Falta sofrida', short: 'Falta sof.', tone: 'green' },
 ]

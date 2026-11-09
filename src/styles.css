@@ -590,3 +590,25 @@ input:focus,select:focus,textarea:focus{border-color:var(--blue-line)!important;
 @media (max-width:380px){
   .live-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+/* v4.1 · polimento do Jogo ao vivo (uso na beira do campo: sol, uma mão, toques rápidos) */
+button.live-clock{border:0;color:var(--ink);cursor:pointer}
+.live-clock.paused{background:var(--amber-soft)}
+.live-clock.paused strong{color:var(--amber)}
+.live-clock.paused small{color:var(--amber)}
+.live-command-panel{gap:8px;padding:10px}
+.cmd-clock{display:flex;gap:8px}
+.cmd-clock>button{min-height:52px;flex:1}
+.cmd-clock .cmd-main{flex:1.6;font-size:15px}
+.live-team-actions{gap:6px}
+.team-action{flex-direction:row;align-items:center;justify-content:space-between;min-height:52px;padding:8px 12px;font-size:12px;line-height:1.15;gap:8px}
+.team-action span{max-width:9ch}
+.cmd-tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.cmd-tools button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:52px;border-radius:14px;background:var(--surface-2);color:var(--ink-2);font-size:11.5px;font-weight:700}
+.cmd-tools button:disabled{opacity:.4}
+.cmd-tools button.finish{color:var(--pink)}
+.live-action{min-height:60px;font-size:12.5px;color:var(--ink-2);letter-spacing:-.005em}
+.live-action b{font-size:21px}
+.live-action:active:not(:disabled){transform:scale(.94)}
+.live-player header strong{font-size:16px}
+.live-actions{gap:5px}
+@media (min-width:761px){.cmd-tools{grid-template-columns:repeat(4,minmax(0,140px))}}

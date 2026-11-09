@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, CloudOff, Crown, Flag, Pause, Play, Square, Timer, Undo2, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, CloudOff, Crown, Flag, Pause, Play, Square, Undo2, Users, X } from 'lucide-react'
 import type { Athlete, CalendarEvent, CategoryId, SessionRecord } from '../types'
 import { FINISHING_KEYS, GAME_KEYS, GAME_LABELS } from '../types'
 import {
@@ -315,10 +315,13 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
             <strong>{scoreFor}<i>×</i>{scoreAgainst}</strong>
             <span className="live-team">{match.opponent || 'Adversário'}</span>
           </div>
-          <div className={`live-clock ${running ? 'running' : ''}`}>
-            <small>{match.phase === 'first' || match.phase === 'second' ? (match.period === 1 ? '1ºT' : '2ºT') : PHASE_LABEL[match.phase]}</small>
-            <strong>{formatClock(seconds)}</strong>
-          </div>
+          {(() => {
+            const inPlay = match.phase === 'first' || match.phase === 'second'
+            const body = <><small>{inPlay ? (match.period === 1 ? '1ºT' : '2ºT') : PHASE_LABEL[match.phase]}{inPlay && !running ? ' · pausado' : ''}</small><strong>{formatClock(seconds)}</strong></>
+            return isCommander && inPlay
+              ? <button className={`live-clock ${running ? 'running' : 'paused'}`} onClick={() => setAdjustOpen(true)} type="button" aria-label={`Cronômetro ${formatClock(seconds)}. Tocar para ajustar`}>{body}</button>
+              : <div className={`live-clock ${running ? 'running' : inPlay ? 'paused' : ''}`} role="timer" aria-live="off">{body}</div>
+          })()}
         </div>
         <div className="live-bar-meta">
           {isCommander ? <span className="live-command me"><Crown size={13} /> Você comanda</span> : <span className="live-command"><Crown size={13} /> Comando: {match.commanderName || '—'}</span>}
@@ -341,28 +344,26 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
         <>
           {isCommander && match.status !== 'finished' && (
             <section className="live-command-panel" aria-label="Controles do comando">
-              <div className="live-clock-controls">
-                {match.phase === 'pre' && <button className="primary-button" onClick={() => startPeriod(1)} type="button"><Play size={16} /> Iniciar 1ºT</button>}
+              <div className="cmd-clock">
+                {match.phase === 'pre' && <button className="primary-button cmd-main" onClick={() => startPeriod(1)} type="button"><Play size={18} /> Iniciar 1ºT</button>}
+                {match.phase === 'break' && <button className="primary-button cmd-main" onClick={() => startPeriod(2)} type="button"><Play size={18} /> Iniciar 2ºT</button>}
                 {(match.phase === 'first' || match.phase === 'second') && (running
-                  ? <button className="secondary-button" onClick={pause} type="button"><Pause size={16} /> Pausar</button>
-                  : <button className="primary-button" onClick={resume} type="button"><Play size={16} /> Retomar</button>)}
-                {match.phase === 'first' && <button className="secondary-button" onClick={endPeriod} type="button"><Square size={14} /> Encerrar 1ºT</button>}
-                {match.phase === 'break' && <button className="primary-button" onClick={() => startPeriod(2)} type="button"><Play size={16} /> Iniciar 2ºT</button>}
-                {match.phase === 'second' && <button className="secondary-button" onClick={endPeriod} type="button"><Square size={14} /> Encerrar 2ºT</button>}
-                {match.phase !== 'pre' && match.phase !== 'done' && match.phase !== 'break' && <button className="secondary-button" onClick={() => setAdjustOpen(true)} type="button"><Timer size={15} /> Ajustar</button>}
+                  ? <button className="secondary-button cmd-main" onClick={pause} type="button"><Pause size={18} /> Pausar</button>
+                  : <button className="primary-button cmd-main" onClick={resume} type="button"><Play size={18} /> Retomar</button>)}
+                {(match.phase === 'first' || match.phase === 'second') && <button className="secondary-button" onClick={endPeriod} type="button"><Square size={14} /> Encerrar {match.period === 1 ? '1ºT' : '2ºT'}</button>}
               </div>
               <div className="live-team-actions">
                 {TEAM_ACTIONS.map((a) => (
-                  <button key={a.kind} className={`team-action ${a.kind} ${flash === `team:${a.kind}` ? 'flash' : ''}`} onClick={() => tap(a.kind, null)} type="button">
-                    <span>{a.label}</span><b>{a.kind === 'corner_for' ? team.cornersFor : a.kind === 'corner_against' ? team.cornersAgainst : team.goalsAgainst}</b>
+                  <button key={a.kind} className={`team-action ${a.kind} ${flash === `team:${a.kind}` ? 'flash' : ''}`} onClick={() => tap(a.kind, null)} type="button" aria-label={`${a.label}: registrar`}>
+                    <span>{a.kind === 'corner_for' ? 'Escanteio a favor' : a.kind === 'corner_against' ? 'Escanteio contra' : 'Gol sofrido'}</span><b>{a.kind === 'corner_for' ? team.cornersFor : a.kind === 'corner_against' ? team.cornersAgainst : team.goalsAgainst}</b>
                   </button>
                 ))}
               </div>
-              <div className="live-clock-controls">
-                <button className="secondary-button" onClick={() => setSubOpen(true)} type="button" disabled={match.phase === 'pre'}><ArrowLeftRight size={15} /> Substituição</button>
-                <button className="secondary-button" onClick={() => setView('lineup')} type="button"><Users size={15} /> Relação</button>
-                <button className="secondary-button" onClick={() => setView('summary')} type="button"><Flag size={15} /> Resumo</button>
-                <button className="secondary-button danger-soft" onClick={() => void finishMatch()} type="button"><Check size={15} /> Finalizar jogo</button>
+              <div className="cmd-tools">
+                <button onClick={() => setSubOpen(true)} type="button" disabled={match.phase === 'pre'}><ArrowLeftRight size={16} /><span>Substituir</span></button>
+                <button onClick={() => setView('lineup')} type="button"><Users size={16} /><span>Relação</span></button>
+                <button onClick={() => setView('summary')} type="button"><Flag size={16} /><span>Resumo</span></button>
+                <button className="finish" onClick={() => void finishMatch()} type="button"><Check size={16} /><span>Finalizar</span></button>
               </div>
             </section>
           )}
