@@ -84,7 +84,7 @@ export function PerformanceTab({ category, athletes, sessions, onEdit, onDelete 
       const base = { atleta: a.name, camisa: a.number, posicao: a.positions, pe_dominante: a.dominantFoot }
       if (mode === 'game') {
         const r = gameRates(game)
-        return { ...base, jogos: game.sessions, gols: game.goals, assistencias: game.assists, finalizacoes: game.shots, finalizacoes_no_gol: game.shotsOnTarget, passes_total: game.passTotal, passes_certos: game.accuratePasses, passes_errados: game.wrongPasses, desarmes: game.tackles, perdas_posse: game.possessionLoss, faltas_cometidas: game.foulsCommitted, faltas_sofridas: game.foulsSuffered, aproveitamento_pct: r[0].value, conversao_pct: r[1].value, precisao_passe_pct: r[2].value }
+        return { ...base, jogos: game.sessions, gols: game.goals, assistencias: game.assists, finalizacoes: game.shots, finalizacoes_no_gol: game.shotsOnTarget, passes_total: game.passTotal, passes_certos: game.accuratePasses, passes_errados: game.wrongPasses, desarmes: game.tackles, perdas_posse: game.possessionLoss, faltas_cometidas: game.foulsCommitted, faltas_sofridas: game.foulsSuffered, interceptacoes: game.interceptions, aproveitamento_pct: r[0].value, conversao_pct: r[1].value, precisao_passe_pct: r[2].value }
       }
       const r = finishingRates(fin)
       return { ...base, sessoes: fin.sessions, finalizacoes: fin.shots, finalizacoes_no_gol: fin.onTarget, gols: fin.goals, finalizacoes_dominante: fin.dominant.shots, gols_dominante: fin.dominant.goals, finalizacoes_nao_dominante: fin.nonDominant.shots, gols_nao_dominante: fin.nonDominant.goals, aproveitamento_pct: r[0].value, conversao_pct: r[1].value, eficiencia_dominante_pct: r[2].value, eficiencia_nao_dominante_pct: r[3].value }
@@ -173,7 +173,7 @@ export function PerformanceTab({ category, athletes, sessions, onEdit, onDelete 
             <Total label="Gols" value={g.goals} sub={`${g.assists} assistências`} />
             <Total label="Finalizações" value={g.shots} sub={`${g.shotsOnTarget} no gol`} />
             <Total label="Passes" value={g.passTotal} sub={`${g.accuratePasses} certos · ${g.wrongPasses} errados`} />
-            <Total label="Desarmes" value={g.tackles} sub={`${g.possessionLoss} perdas da posse`} />
+            <Total label="Desarmes" value={g.tackles} sub={`${g.interceptions} interceptações · ${g.possessionLoss} perdas`} />
             <Total label="Faltas" value={g.foulsCommitted} sub={`cometidas · ${g.foulsSuffered} sofridas`} />
           </> : <>
             <Total label="Sessões" value={f.sessions} sub="treinos finalizados" />
@@ -259,7 +259,7 @@ export function PerformanceTab({ category, athletes, sessions, onEdit, onDelete 
               <thead><tr><th className="left">Indicador</th>{compareRows.map((row) => <th key={row.athlete.id}>{row.athlete.name.split(' ')[0]}</th>)}</tr></thead>
               <tbody>
                 {(mode === 'game'
-                  ? ([['Jogos', (r) => r.game.sessions], ...(['goals', 'assists', 'shots', 'shotsOnTarget', 'accuratePasses', 'wrongPasses', 'tackles', 'possessionLoss', 'foulsCommitted', 'foulsSuffered'] as const).map((k) => [GAME_LABELS[k], (r: (typeof compareRows)[number]) => r.game[k]] as const)] as Array<readonly [string, (r: (typeof compareRows)[number]) => number]>)
+                  ? ([['Jogos', (r) => r.game.sessions], ...(['goals', 'assists', 'shots', 'shotsOnTarget', 'accuratePasses', 'wrongPasses', 'tackles', 'possessionLoss', 'foulsCommitted', 'foulsSuffered', 'interceptions'] as const).map((k) => [GAME_LABELS[k], (r: (typeof compareRows)[number]) => r.game[k]] as const)] as Array<readonly [string, (r: (typeof compareRows)[number]) => number]>)
                   : ([['Sessões', (r) => r.fin.sessions], ['Finalizações', (r) => r.fin.shots], ['No gol', (r) => r.fin.onTarget], ['Gols', (r) => r.fin.goals]] as Array<readonly [string, (r: (typeof compareRows)[number]) => number]>)
                 ).map(([label, get]) => <tr key={label}><td className="left">{label}</td>{compareRows.map((row) => <td key={row.athlete.id}>{get(row)}</td>)}</tr>)}
                 {(mode === 'game' ? gameRates(compareRows[0].game) : finishingRates(compareRows[0].fin)).map((first, index) => (

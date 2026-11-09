@@ -1,3 +1,4 @@
+import { LiveMatch } from './screens/LiveMatch'
 import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Activity,
@@ -90,6 +91,7 @@ const GAME_METRICS: Array<{ key: GameMetric; label: string; icon: typeof Activit
   { key: 'possessionLoss', label: 'Perdas da posse', icon: RotateCcw, tone: 'orange' },
   { key: 'foulsCommitted', label: 'Faltas cometidas', icon: Swords, tone: 'red' },
   { key: 'foulsSuffered', label: 'Faltas sofridas', icon: Zap, tone: 'green' },
+  { key: 'interceptions', label: 'Interceptações', icon: Activity, tone: 'purple' },
 ]
 
 function freshCategory(): CategoryData {
@@ -368,6 +370,7 @@ function App() {
   const [mode, setMode] = useState<ScoutMode>('game')
   const [activeAthleteId, setActiveAthleteId] = useState('')
   const [scoutDay, setScoutDay] = useState<CalendarEvent | null>(null)
+  const [liveEvent, setLiveEvent] = useState<CalendarEvent | null>(null)
   const [report, setReport] = useState<SessionRecord | null>(null)
   const [toast, setToast] = useState('')
   const [editing, setEditing] = useState<SessionRecord | null>(null)
@@ -381,13 +384,14 @@ function App() {
   // ---------- botão "voltar" do celular e do navegador ----------
   // Cada nível aberto (clube, categoria, janela) vira uma entrada no histórico.
   // Voltar fecha a janela de cima ou sobe um nível, em vez de sair do app.
-  const modalCount = [syncOpen, editing, report, evalTarget, fileAthleteId, reportAthleteId].filter(Boolean).length
+  const modalCount = [syncOpen, editing, report, evalTarget, fileAthleteId, reportAthleteId, liveEvent].filter(Boolean).length
   const depth = (sync.team ? 1 : 0) + (category ? 1 : 0) + modalCount
   const prevDepth = useRef(depth)
   const skipPops = useRef(0)
   const browserPop = useRef(false)
   const goUp = useRef<() => void>(() => {})
   goUp.current = () => {
+    if (liveEvent) { setLiveEvent(null); return }
     if (reportAthleteId) setReportAthleteId('')
     else if (evalTarget) setEvalTarget(null)
     else if (fileAthleteId) setFileAthleteId('')
@@ -486,6 +490,10 @@ function App() {
   }
 
   function startScout(event: CalendarEvent, nextMode: ScoutMode) {
+    if (nextMode === 'game' && event.type === 'Jogo' && sync.team && sync.session) {
+      setLiveEvent(event)
+      return
+    }
     setScoutDay(event)
     setMode(nextMode)
     setTab('scout')
@@ -507,6 +515,12 @@ function App() {
     if (!window.confirm(`Zerar os contadores de ${activeAthlete.name}?`)) return
     updateCategory((value) => ({ ...value, stats: { ...value.stats, [activeAthlete.id]: freshStats() } }))
     setToast('Contadores zerados')
+  }
+
+  function saveMatchSessions(sessions: SessionRecord[]) {
+    if (!category || sessions.length === 0) return
+    const ids = new Set(sessions.map((s) => s.id))
+    updateCategory((value) => ({ ...value, sessions: [...sessions, ...value.sessions.filter((s) => !ids.has(s.id))] }))
   }
 
   function finishSession() {
@@ -631,7 +645,7 @@ function App() {
   ['scout', BarChart3, 'Central de Scout', 'Scout', current.sessions.length],
   ['performance', TrendingUp, 'Desempenho', 'Números', null],
   ['evaluations', ClipboardCheck, 'Avaliações', 'Avaliar', evaluations.length],
-] as Array<[TabId, typeof Users, string, string, number | null]>).map(([id, Icon, label, short, count]) => <button key={id} className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); window.scrollTo({ top: 0 }) }} type="button"><Icon size={17} /><span className="tab-label">{label}</span><span className="tab-short">{short}</span>{count !== null && <b>{count}</b>}</button>)}</nav>{tab === 'roster' && <RosterTab athletes={current.athletes} activeId={activeAthlete?.id ?? ''} onActive={setActiveAthleteId} onAdd={addAthlete} onRemove={removeAthlete} onOpenFile={setFileAthleteId} />}{tab === 'evaluations' && <EvaluationsTab athletes={current.athletes} evaluations={evaluations} today={todayIso()} readOnly={sync.readOnly} onNew={(athlete) => setEvalTarget({ athlete, existing: null })} onOpenFile={(athlete) => setFileAthleteId(athlete.id)} onReport={(athlete) => setReportAthleteId(athlete.id)} />}{fileAthlete && <AthleteFile athlete={fileAthlete} category={category} sessions={current.sessions} evaluations={evaluations} readOnly={sync.readOnly} onNewEvaluation={() => setEvalTarget({ athlete: fileAthlete, existing: null })} onEditEvaluation={(evaluation) => setEvalTarget({ athlete: fileAthlete, existing: evaluation })} onDeleteEvaluation={deleteEvaluation} onReport={() => setReportAthleteId(fileAthlete.id)} onClose={() => setFileAthleteId('')} />}{evalTarget && <EvaluationForm athlete={evalTarget.athlete} existing={evalTarget.existing} previous={evalTarget.existing ? previousOf(evaluations, evalTarget.existing) : lastEvalOf(evalTarget.athlete.id)} evaluator={evaluator} today={todayIso()} onSave={saveEvaluation} onClose={() => setEvalTarget(null)} />}{reportAthlete && <ParentReport athlete={reportAthlete} category={category} clubName={sync.team?.name || data.teamName} coachName={sync.profileName} sessions={current.sessions} evaluations={evaluations} today={todayIso()} onClose={() => setReportAthleteId('')} />}{tab === 'calendar' && <CalendarTab events={current.events} onSaveDay={saveCalendarDay} onRemoveDay={removeCalendarDay} onStartScout={startScout} />}{tab === 'scout' && <ScoutTab mode={mode} setMode={setMode} scoutDay={scoutDay} onClearContext={() => setScoutDay(null)} onOpenCalendar={() => setTab('calendar')} athletes={current.athletes} activeAthlete={activeAthlete} stats={activeStats} onActive={setActiveAthleteId} onIncrement={increment} onReset={resetStats} onFinish={finishSession} />}{tab === 'performance' && <PerformanceTab category={category} athletes={current.athletes} sessions={current.sessions} onEdit={setEditing} onDelete={deleteSession} />}{editing && <SessionEditor session={editing} onSave={(stats) => updateSession(editing.id, stats)} onClose={() => setEditing(null)} />}{report && <ReportModal session={report} onClose={() => setReport(null)} onCopy={copyReport} onDownload={downloadReport} />}{syncPanel}{toast && <div className="toast"><Check size={16} /> {toast}</div>}</main>
+] as Array<[TabId, typeof Users, string, string, number | null]>).map(([id, Icon, label, short, count]) => <button key={id} className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); window.scrollTo({ top: 0 }) }} type="button"><Icon size={17} /><span className="tab-label">{label}</span><span className="tab-short">{short}</span>{count !== null && <b>{count}</b>}</button>)}</nav>{tab === 'roster' && <RosterTab athletes={current.athletes} activeId={activeAthlete?.id ?? ''} onActive={setActiveAthleteId} onAdd={addAthlete} onRemove={removeAthlete} onOpenFile={setFileAthleteId} />}{tab === 'evaluations' && <EvaluationsTab athletes={current.athletes} evaluations={evaluations} today={todayIso()} readOnly={sync.readOnly} onNew={(athlete) => setEvalTarget({ athlete, existing: null })} onOpenFile={(athlete) => setFileAthleteId(athlete.id)} onReport={(athlete) => setReportAthleteId(athlete.id)} />}{fileAthlete && <AthleteFile athlete={fileAthlete} category={category} sessions={current.sessions} evaluations={evaluations} readOnly={sync.readOnly} onNewEvaluation={() => setEvalTarget({ athlete: fileAthlete, existing: null })} onEditEvaluation={(evaluation) => setEvalTarget({ athlete: fileAthlete, existing: evaluation })} onDeleteEvaluation={deleteEvaluation} onReport={() => setReportAthleteId(fileAthlete.id)} onClose={() => setFileAthleteId('')} />}{evalTarget && <EvaluationForm athlete={evalTarget.athlete} existing={evalTarget.existing} previous={evalTarget.existing ? previousOf(evaluations, evalTarget.existing) : lastEvalOf(evalTarget.athlete.id)} evaluator={evaluator} today={todayIso()} onSave={saveEvaluation} onClose={() => setEvalTarget(null)} />}{reportAthlete && <ParentReport athlete={reportAthlete} category={category} clubName={sync.team?.name || data.teamName} coachName={sync.profileName} sessions={current.sessions} evaluations={evaluations} today={todayIso()} onClose={() => setReportAthleteId('')} />}{tab === 'calendar' && <CalendarTab events={current.events} onSaveDay={saveCalendarDay} onRemoveDay={removeCalendarDay} onStartScout={startScout} />}{tab === 'scout' && <ScoutTab mode={mode} setMode={setMode} scoutDay={scoutDay} onClearContext={() => setScoutDay(null)} onOpenCalendar={() => setTab('calendar')} athletes={current.athletes} activeAthlete={activeAthlete} stats={activeStats} onActive={setActiveAthleteId} onIncrement={increment} onReset={resetStats} onFinish={finishSession} />}{tab === 'performance' && <PerformanceTab category={category} athletes={current.athletes} sessions={current.sessions} onEdit={setEditing} onDelete={deleteSession} />}{editing && <SessionEditor session={editing} onSave={(stats) => updateSession(editing.id, stats)} onClose={() => setEditing(null)} />}{report && <ReportModal session={report} onClose={() => setReport(null)} onCopy={copyReport} onDownload={downloadReport} />}{liveEvent && category && sync.team && sync.session && <LiveMatch teamId={sync.team.id} clubName={sync.team.name || data.teamName} category={category} event={liveEvent} athletes={current.athletes} user={{ id: sync.session.user.id, name: sync.profileName || sync.session.user.email || 'Observador' }} readOnly={sync.readOnly} onClose={() => setLiveEvent(null)} onSessions={saveMatchSessions} />}{syncPanel}{toast && <div className="toast"><Check size={16} /> {toast}</div>}</main>
 }
 
 function RosterTab({ athletes, activeId, onActive, onAdd, onRemove, onOpenFile }: { athletes: Athlete[]; activeId: string; onActive: (id: string) => void; onAdd: (athlete: Athlete) => void; onRemove: (id: string) => void; onOpenFile: (id: string) => void }) {
@@ -709,7 +723,7 @@ function DayPanel({ date, event, onSave, onRemove, onStartScout }: { date: strin
     if (!form.title.trim() || !form.mdTag) return
     onSave({ ...form, date, title: form.title.trim() })
   }
-  return <aside className="day-panel"><div className="day-panel-top"><div><div className="eyebrow">DATA SELECIONADA</div><h3>{dayLabel}</h3></div>{event && <span className={`md-badge ${event.mdTag === 'MD' ? 'match' : 'prep'}`}>{event.mdTag}</span>}</div><form className="day-form" onSubmit={submit}><label>Etiqueta de periodização<select required value={form.mdTag} onChange={(input) => setForm({ ...form, mdTag: input.target.value })}><option value="">Selecionar MD</option>{MD_OPTIONS.filter(Boolean).map((tag) => <option key={tag}>{tag}</option>)}</select></label><label>Tipo de sessão<select value={form.type} onChange={(input) => handleTypeChange(input.target.value as EventType)}><option>Treino</option><option>Jogo</option></select></label><label>Nome do compromisso<input required value={form.title} onChange={(input) => setForm({ ...form, title: input.target.value })} placeholder="Ex.: Organização ofensiva" /></label><label>{form.type === 'Jogo' ? 'Adversário' : 'Foco do treino'}<input value={form.opponent} onChange={(input) => setForm({ ...form, opponent: input.target.value })} placeholder={form.type === 'Jogo' ? 'Nome do adversário' : 'Ex.: Finalização sob pressão'} /></label><label>Local<input value={form.location} onChange={(input) => setForm({ ...form, location: input.target.value })} placeholder="Campo / CT" /></label><button className="primary-button full-button" type="submit">{event ? 'Atualizar data' : 'Classificar data'} <Check size={16} /></button></form>{event && <><div className="quick-scout"><div><div className="eyebrow">ABERTURA RÁPIDA</div><strong>Iniciar sessão em {event.mdTag}</strong><small>O relatório carregará automaticamente a etiqueta {event.mdTag} e a data {formatDayMonth(event.date)}.</small></div><button className="quick-button game" onClick={() => onStartScout(event, 'game')} type="button"><Swords size={16} /> Iniciar Scout de Jogo</button><button className="quick-button finishing" onClick={() => onStartScout(event, 'finishing')} type="button"><Target size={16} /> Iniciar Scout de Treino de Finalização</button></div><button className="delete-day" onClick={() => onRemove(event.id)} type="button"><Trash2 size={14} /> Remover esta data</button></>}</aside>
+  return <aside className="day-panel"><div className="day-panel-top"><div><div className="eyebrow">DATA SELECIONADA</div><h3>{dayLabel}</h3></div>{event && <span className={`md-badge ${event.mdTag === 'MD' ? 'match' : 'prep'}`}>{event.mdTag}</span>}</div><form className="day-form" onSubmit={submit}><label>Etiqueta de periodização<select required value={form.mdTag} onChange={(input) => setForm({ ...form, mdTag: input.target.value })}><option value="">Selecionar MD</option>{MD_OPTIONS.filter(Boolean).map((tag) => <option key={tag}>{tag}</option>)}</select></label><label>Tipo de sessão<select value={form.type} onChange={(input) => handleTypeChange(input.target.value as EventType)}><option>Treino</option><option>Jogo</option></select></label><label>Nome do compromisso<input required value={form.title} onChange={(input) => setForm({ ...form, title: input.target.value })} placeholder="Ex.: Organização ofensiva" /></label><label>{form.type === 'Jogo' ? 'Adversário' : 'Foco do treino'}<input value={form.opponent} onChange={(input) => setForm({ ...form, opponent: input.target.value })} placeholder={form.type === 'Jogo' ? 'Nome do adversário' : 'Ex.: Finalização sob pressão'} /></label><label>Local<input value={form.location} onChange={(input) => setForm({ ...form, location: input.target.value })} placeholder="Campo / CT" /></label><button className="primary-button full-button" type="submit">{event ? 'Atualizar data' : 'Classificar data'} <Check size={16} /></button></form>{event && <><div className="quick-scout"><div><div className="eyebrow">ABERTURA RÁPIDA</div><strong>Iniciar sessão em {event.mdTag}</strong><small>O relatório carregará automaticamente a etiqueta {event.mdTag} e a data {formatDayMonth(event.date)}.</small></div><button className="quick-button game" onClick={() => onStartScout(event, 'game')} type="button"><Swords size={16} /> {event.type === 'Jogo' ? 'Abrir Jogo ao vivo' : 'Iniciar Scout de Jogo'}</button><button className="quick-button finishing" onClick={() => onStartScout(event, 'finishing')} type="button"><Target size={16} /> Iniciar Scout de Treino de Finalização</button></div><button className="delete-day" onClick={() => onRemove(event.id)} type="button"><Trash2 size={14} /> Remover esta data</button></>}</aside>
 }
 
 function ScoutTab({ mode, setMode, scoutDay, onClearContext, onOpenCalendar, athletes, activeAthlete, stats, onActive, onIncrement, onReset, onFinish }: { mode: ScoutMode; setMode: (mode: ScoutMode) => void; scoutDay: CalendarEvent | null; onClearContext: () => void; onOpenCalendar: () => void; athletes: Athlete[]; activeAthlete?: Athlete; stats: Stats; onActive: (id: string) => void; onIncrement: (metric: GameMetric | FinishingMetric, amount?: number) => void; onReset: () => void; onFinish: () => void }) {

@@ -35,7 +35,7 @@ export type GameTotals = Record<GameMetric, number> & { sessions: number; passTo
 export function sumGame(sessions: SessionRecord[]): GameTotals {
   const totals = {
     sessions: 0, passTotal: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, accuratePasses: 0,
-    wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0,
+    wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0,
   } as GameTotals
   for (const session of sessions) {
     if (session.mode !== 'game') continue

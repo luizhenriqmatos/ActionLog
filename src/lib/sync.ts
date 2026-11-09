@@ -42,10 +42,10 @@ export function sessionRow(teamId: string, s: SessionRecord): Row {
     dominant_foot_snapshot: s.dominantFootSnapshot, calendar_date: s.calendarDate, periodization_tag: s.periodizationTag,
     event_id: s.eventId, event_title: s.eventTitle, event_type: s.eventType,
     goals: g.goals, assists: g.assists, shots: g.shots, shots_on_target: g.shotsOnTarget, accurate_passes: g.accuratePasses,
-    wrong_passes: g.wrongPasses, tackles: g.tackles, possession_loss: g.possessionLoss, fouls_committed: g.foulsCommitted, fouls_suffered: g.foulsSuffered,
+    wrong_passes: g.wrongPasses, tackles: g.tackles, possession_loss: g.possessionLoss, fouls_committed: g.foulsCommitted, fouls_suffered: g.foulsSuffered, interceptions: g.interceptions,
     dominant_finishes: f.dominantFinishes, dominant_on_target: f.dominantOnTarget, dominant_goals: f.dominantGoals,
     non_dominant_finishes: f.nonDominantFinishes, non_dominant_on_target: f.nonDominantOnTarget, non_dominant_goals: f.nonDominantGoals,
-    legacy_passes: s.legacyPasses ?? null, created_at: s.createdAt, updated_at: s.updatedAt ?? s.createdAt, deleted_at: null,
+    legacy_passes: s.legacyPasses ?? null, minutes_played: s.minutesPlayed ?? null, match_id: s.matchId ?? null, created_at: s.createdAt, updated_at: s.updatedAt ?? s.createdAt, deleted_at: null,
   }
 }
 
@@ -81,10 +81,12 @@ export function rowSession(r: Row): SessionRecord {
     dominantFootSnapshot: foot(r.dominant_foot_snapshot), calendarDate: str(r.calendar_date).slice(0, 10), periodizationTag: str(r.periodization_tag),
     eventTitle: str(r.event_title), eventId: str(r.event_id), eventType: r.event_type === 'Jogo' || r.event_type === 'Treino' ? r.event_type : '',
     stats: {
-      game: { goals: num(r.goals), assists: num(r.assists), shots: num(r.shots), shotsOnTarget: num(r.shots_on_target), accuratePasses: num(r.accurate_passes), wrongPasses: num(r.wrong_passes), tackles: num(r.tackles), possessionLoss: num(r.possession_loss), foulsCommitted: num(r.fouls_committed), foulsSuffered: num(r.fouls_suffered) },
+      game: { goals: num(r.goals), assists: num(r.assists), shots: num(r.shots), shotsOnTarget: num(r.shots_on_target), accuratePasses: num(r.accurate_passes), wrongPasses: num(r.wrong_passes), tackles: num(r.tackles), possessionLoss: num(r.possession_loss), foulsCommitted: num(r.fouls_committed), foulsSuffered: num(r.fouls_suffered), interceptions: num(r.interceptions) },
       finishing: { dominantFinishes: num(r.dominant_finishes), dominantOnTarget: num(r.dominant_on_target), dominantGoals: num(r.dominant_goals), nonDominantFinishes: num(r.non_dominant_finishes), nonDominantOnTarget: num(r.non_dominant_on_target), nonDominantGoals: num(r.non_dominant_goals) },
     },
     ...(legacy !== undefined ? { legacyPasses: legacy } : {}),
+    ...(r.minutes_played !== null && r.minutes_played !== undefined ? { minutesPlayed: num(r.minutes_played) } : {}),
+    ...(r.match_id ? { matchId: String(r.match_id) } : {}),
     schemaVersion: 2,
   }
 }

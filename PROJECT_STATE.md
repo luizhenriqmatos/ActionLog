@@ -95,3 +95,15 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Navegação: botão "voltar" do celular/navegador fecha janelas e volta níveis (clube › categoria › aba); seletor de categoria no topo mantém a aba atual; dock flutuante no mobile.
 - Calendário: seletores de mês e ano (ano atual por padrão; ±5 anos e anos com eventos); células listradas para dias de jogo.
 - Deploy: `vercel.json` adicionado (Vite + pnpm, rota SPA). Netlify continua ativo.
+
+## v4.1 · Jogo ao vivo (2026-11-09)
+- Novo modo **Jogo ao vivo** aberto pelo compromisso do tipo Jogo na Agenda; vários celulares do mesmo clube entram no mesmo `matches` (único por `team_id + calendar_event_id`).
+- Tabelas: `matches` (cronômetro guardado como estado: `phase`, `period`, `clock_running`, `clock_started_at`, `clock_base_seconds`; comando), `match_players` (relação, setor, titular, em campo), `match_events` (um toque = uma linha; id gerado no aparelho; desfazer = `deleted_at`, só o autor). RLS com `private.is_team_member` / `private.can_write_team`. RPC `server_now()` corrige o relógio de cada aparelho.
+- `scout_sessions` ganhou `interceptions`, `minutes_played`, `match_id`; views atualizadas; interceptação entra em todo o app.
+- Escrita por fila no `localStorage` (`actionlog_match_queue_v1`), enviada na hora e em lote; sem rede, reenvia quando volta, sem duplicar. Leitura do jogo a cada 5 s.
+- Observador: chips de setor, todos os atletas em campo do setor de uma vez, um toque por ação, desfazer o próprio último, últimas ações com minuto. Comando: cronômetro, ajuste, substituição, escanteios, gol adversário, assumir comando, finalizar.
+- Finalizar gera uma `scout_session` (mode game) por atleta que entrou, com minutos; validações viram aviso (gol conta como no gol e finalização quando faltar).
+- Regras puras e testadas em `src/lib/match.ts` (setor sugerido, cronômetro, coletivo, minutagem: titular inteiro, sai no 1ºT, entra no 2ºT, troca no intervalo, sai e volta).
+- Simulação com 3 navegadores: cronômetro com diferença ≤ 1 s, substituição vista em ~5 s, fila offline sem duplicar, coletivo = soma dos atletas, sessões em Desempenho.
+- Guia da comissão: `docs/guia-jogo-ao-vivo.md`.
+- Limite conhecido: quem registra logo após o comando mudar o tempo pode ficar até 5 s com o período anterior.
