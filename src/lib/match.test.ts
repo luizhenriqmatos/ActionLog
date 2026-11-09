@@ -102,3 +102,37 @@ test('sessão gerada: gol sem finalização vira aviso, não bloqueio', () => {
   assert.equal(r.totals.shotsOnTarget, 1)
   assert.equal(r.totals.shots, 1)
 })
+
+test('posição → setor (lista nova e texto antigo)', async () => {
+  const { positionCodes, primaryPosition, sectorOf, groupOf, positionsText } = await import('./match.ts')
+  assert.equal(primaryPosition('Goleiro'), 'GOL')
+  assert.equal(primaryPosition('Zagueiro, Lateral direito'), 'ZAG')
+  assert.deepEqual(positionCodes('Zagueiro, Lateral direito'), ['ZAG', 'LD'])
+  assert.equal(primaryPosition('lateral esq.'), 'LE')
+  assert.equal(primaryPosition('Centroavante'), 'ATA')
+  assert.equal(primaryPosition('Ponta esquerda'), 'PE')
+  assert.equal(primaryPosition('Meia ofensivo'), 'MEI')
+  assert.equal(primaryPosition('Meia'), 'MC')
+  assert.equal(primaryPosition('Volante'), 'VOL')
+  assert.equal(primaryPosition('Massagista'), null)
+  for (const [code, sector] of [['GOL', 'DEF'], ['LD', 'DEF'], ['ZAG', 'DEF'], ['LE', 'DEF'], ['VOL', 'MEI'], ['MC', 'MEI'], ['MD', 'MEI'], ['ME', 'MEI'], ['MEI', 'MEI'], ['PD', 'ATA'], ['PE', 'ATA'], ['ATA', 'ATA']] as const) {
+    assert.equal(sectorOf(code), sector)
+  }
+  assert.equal(groupOf('Massagista'), 'Sem posição')
+  assert.equal(groupOf('Goleiro'), 'Goleiro')
+  assert.equal(positionsText('ZAG', 'LD'), 'Zagueiro, Lateral direito')
+  assert.equal(positionsText('ZAG', ''), 'Zagueiro')
+})
+
+test('ordem tática: GOL → LD → ZAG → LE → VOL → MC → MD → ME → MEI → PD → PE → ATA → sem posição', async () => {
+  const { byTacticalOrder } = await import('./match.ts')
+  const list = [
+    { name: 'Atacante 9', positions: 'Atacante', number: '9' }, { name: 'Sem', positions: '', number: '1' },
+    { name: 'Zag 4', positions: 'Zagueiro', number: '4' }, { name: 'Zag 3', positions: 'Zagueiro', number: '3' },
+    { name: 'LE', positions: 'Lateral esquerdo', number: '6' }, { name: 'Gol', positions: 'Goleiro', number: '12' },
+    { name: 'PE', positions: 'Ponta esquerda', number: '11' }, { name: 'MEI', positions: 'Meia ofensivo', number: '10' },
+    { name: 'VOL', positions: 'Volante', number: '5' }, { name: 'LD', positions: 'Lateral direito', number: '2' },
+    { name: 'MC', positions: 'Meia central', number: '8' }, { name: 'PD', positions: 'Ponta direita', number: '7' },
+  ]
+  assert.deepEqual([...list].sort(byTacticalOrder).map((a) => a.name), ['Gol', 'LD', 'Zag 3', 'Zag 4', 'LE', 'VOL', 'MC', 'MEI', 'PD', 'PE', 'Atacante 9', 'Sem'])
+})

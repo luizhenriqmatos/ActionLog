@@ -107,3 +107,11 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Simulação com 3 navegadores: cronômetro com diferença ≤ 1 s, substituição vista em ~5 s, fila offline sem duplicar, coletivo = soma dos atletas, sessões em Desempenho.
 - Guia da comissão: `docs/guia-jogo-ao-vivo.md`.
 - Limite conhecido: quem registra logo após o comando mudar o tempo pode ficar até 5 s com o período anterior.
+
+## v4.2 · Painel do Jogo ao vivo (2026-11-09)
+- Todos os atletas em campo empilhados na ordem tática (`byTacticalOrder` em `src/lib/match.ts`): Goleiro → LD → ZAG → LE → VOL → MC → MD → ME → MEI → PD → PE → ATA → sem posição; títulos Goleiro/Defesa/Meio-campo/Ataque. Chips de setor viram filtro (padrão Todos). Reservas num bloco recolhível.
+- Cada ação com `− | número | +`; o `−` desfaz o último evento daquela ação/atleta registrado pelo próprio celular (regra do banco: só o autor desfaz; sem migration).
+- Faixa fixa no topo com placar, período e cronômetro grande; comando controla ali (iniciar/pausar/retomar, encerrar, ajuste Min/Seg em linha, zerar com confirmação).
+- Painel: ações coletivas, substituição em linha, tabela 1ºT/2ºT/Total, histórico de todos os aparelhos (Ocultar), rodapé com Desfazer meu último, Resumo, Copiar relatório, Finalizar partida. Tela ≥ 1024 px em 3 colunas (elenco · atletas + estatísticas · coletivo/substituição/histórico).
+- Cadastro: posição principal (lista de 12) + secundária opcional, gravadas em `positions`; edição de atleta existente; aviso de atletas sem posição. Setor da relação vem da posição (`sectorOf`).
+- Sem mudança de cores, fontes ou tokens; CSS novo só de layout.
