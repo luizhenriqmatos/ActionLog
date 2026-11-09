@@ -10,7 +10,7 @@ Os três celulares entram no **mesmo jogo**. Não importa quem abre primeiro.
 
 ## 2. Quem comanda
 - O primeiro a abrir o jogo vira o **comando** (aparece "Você comanda" no topo).
-- **Só o comando:** monta a relação, controla o cronômetro (iniciar, pausar, encerrar tempos, ajustar), faz substituições, marca **escanteio a favor**, **escanteio contra** e **gol do adversário**, e toca em **Finalizar jogo**.
+- **Só o comando:** monta a relação, controla o cronômetro no topo (iniciar, pausar, encerrar tempos, ajustar Min/Seg ali mesmo, zerar), faz substituições, marca **escanteio a favor**, **escanteio contra** e **gol do adversário**, e toca em **Finalizar jogo**.
 - Se o celular do comando falhar, outra pessoa toca em **Assumir comando**. O jogo continua de onde parou.
 
 ## 3. Antes do apito (comando)
@@ -19,10 +19,14 @@ Os três celulares entram no **mesmo jogo**. Não importa quem abre primeiro.
 3. Toque em **Salvar relação** e, no apito, em **Iniciar 1ºT**.
 
 ## 4. Durante o jogo (todos)
-1. Escolha o seu setor no topo: **Defesa**, **Meio** ou **Ataque**.
-2. Todos os atletas em campo do seu setor aparecem juntos. **Um toque = uma ação** (o número sobe na hora).
-3. Errou? **Desfazer meu último** apaga só a última ação **sua**.
-4. Reservas aparecem no seu setor assim que o comando registra a entrada.
+1. **Todos os atletas em campo aparecem na tela, um embaixo do outro**, na ordem do campo: Goleiro → Defesa → Meio-campo → Ataque. Não precisa abrir atleta por atleta.
+2. Quer ver só o seu setor? Toque em **Defesa**, **Meio** ou **Ataque** no topo (o padrão é **Todos**).
+3. Cada ação tem **− | número | +**. O **+** registra; o **−** desfaz a última daquela ação daquele atleta (só as que **o seu celular** registrou).
+4. O **cronômetro fica fixo no topo** o tempo todo, com o placar e o tempo de jogo.
+5. Reservas ficam no bloco **Reservas** (fechado) e sobem para a posição deles quando o comando registra a entrada.
+6. Mais abaixo: ações coletivas, substituição, estatísticas 1ºT/2ºT/Total e o **histórico de todos os celulares**. No rodapé: **Desfazer meu último**, **Resumo** e **Copiar relatório**.
+
+**Antes do jogo:** no Elenco, cada atleta precisa ter a **posição principal** escolhida na lista (toque em **Editar** no cartão). Atleta sem posição aparece num aviso amarelo.
 
 ## 5. As duas regras para não contar em dobro
 - **Cada atleta tem um dono só: o observador do setor dele.** Se o lateral sobe e finaliza, quem marca é o observador da **Defesa**.

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, CloudOff, Crown, Flag, Pause, Play, Square, Undo2, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, CloudOff, Copy, Crown, Flag, Minus, Pause, Play, Plus, RotateCcw, Square, Undo2, Users } from 'lucide-react'
 import type { Athlete, CalendarEvent, CategoryId, SessionRecord } from '../types'
 import { FINISHING_KEYS, GAME_KEYS, GAME_LABELS } from '../types'
 import {
-  PHASE_LABEL, PLAYER_ACTIONS, SECTORS, TEAM_ACTIONS, activeEvents, actionLabel, clockSeconds, collective, formatClock, isPlayerAction,
+  GROUP_ORDER, PHASE_LABEL, PLAYER_ACTIONS, byTacticalOrder, groupOf, primaryPosition, SECTORS, TEAM_ACTIONS, activeEvents, actionLabel, clockSeconds, collective, formatClock, isPlayerAction,
   minuteLabel, minutesPlayed, playerTotals, roundMinutes, sessionTotals, suggestSector,
   type EventKind, type MatchEvent, type Period, type PlayerAction, type Sector, type TeamAction,
 } from '../lib/match'
@@ -45,8 +45,10 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   const [sector, setSector] = useState<SectorFilter>(() => {
     try { return (localStorage.getItem(`actionlog_sector_${event.id}`) as SectorFilter) || 'ALL' } catch { return 'ALL' }
   })
-  const [subOpen, setSubOpen] = useState(false)
-  const [adjustOpen, setAdjustOpen] = useState(false)
+  const [rosterAll, setRosterAll] = useState(false)
+  const [subOut, setSubOut] = useState('')
+  const [subIn, setSubIn] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(true)
   const [flash, setFlash] = useState('')
   const [toast, setToast] = useState('')
   const matchRef = useRef<MatchRow | null>(null)
@@ -140,6 +142,25 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   if (pending === 0) pendingSince.current = null
   const showPending = !online || (pending > 0 && pendingSince.current !== null && now - pendingSince.current > 4000)
   const canRecord = Boolean(match) && !readOnly && match?.status !== 'finished'
+  const history = useMemo(() => activeEvents(events).filter((e) => e.kind !== 'period_start').sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [events])
+  const wholeSecond = Math.floor(seconds)
+  const liveMinutes = useMemo(() => {
+    if (!match) return new Map<string, number>()
+    const live = match.phase === 'first' || match.phase === 'second' ? { period: match.period, seconds: wholeSecond } : undefined
+    return minutesPlayed(players, events, live)
+    // recalcula a cada segundo do relógio, não a cada quadro
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, events, match?.phase, match?.period, Math.floor(wholeSecond / 15)])
+
+  /** O "−" desfaz o último evento ainda válido daquela ação para aquele atleta, registrado por este celular. */
+  const lastMine = (athleteId: string, kind: PlayerAction) => {
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const e = events[i]
+      if (!e.deletedAt && e.athleteId === athleteId && e.kind === kind && e.createdBy === user.id) return e
+    }
+    return null
+  }
+  const canUndo = (athleteId: string, kind: PlayerAction) => canRecord && lastMine(athleteId, kind) !== null
 
   /* ---------- ações ---------- */
   function stamp(): { period: Period; clockSeconds: number } {
@@ -175,6 +196,31 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     setToast(`Desfeito: ${actionLabel(last.kind)}${last.athleteId ? ` · ${nameOf(last.athleteId)}` : ''}`)
   }
 
+  function undoAction(athleteId: string, kind: PlayerAction) {
+    const last = lastMine(athleteId, kind)
+    if (!last) return
+    const at = serverIso()
+    undoEvent(last.id, at)
+    setLocalUndos((m) => new Map(m).set(last.id, at))
+    try { navigator.vibrate?.(8) } catch { /* sem vibração */ }
+  }
+
+  async function copyReport() {
+    if (!match) return
+    const text = reportText(match, players, events, clubName, event.date)
+    try {
+      await navigator.clipboard.writeText(text)
+      setToast('Relatório copiado')
+    } catch {
+      const area = document.createElement('textarea')
+      area.value = text
+      document.body.appendChild(area)
+      area.select()
+      try { document.execCommand('copy'); setToast('Relatório copiado') } catch { setToast('Não foi possível copiar') }
+      area.remove()
+    }
+  }
+
   function patchMatch(patch: MatchPatch) {
     if (!match) return
     const at = serverIso()
@@ -204,8 +250,13 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   function adjustClock(total: number) {
     if (!match) return
     patchMatch({ clockBaseSeconds: Math.max(0, total), clockStartedAt: match.clockRunning ? serverIso() : null })
-    setAdjustOpen(false)
   }
+  function resetClock() {
+    if (!match) return
+    if (!window.confirm(`Zerar o cronômetro do ${match.period === 1 ? '1º' : '2º'} tempo? As ações já registradas não mudam.`)) return
+    patchMatch({ clockBaseSeconds: 0, clockStartedAt: match.clockRunning ? serverIso() : null })
+  }
+
   function takeCommand() {
     if (readOnly) return
     if (!window.confirm(`Assumir o comando do jogo${match?.commanderName ? ` (hoje com ${match.commanderName})` : ''}?`)) return
@@ -222,7 +273,6 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     const next = players.map((p) => (p.athleteId === outId ? { ...p, onField: false } : p.athleteId === inId ? { ...p, onField: true } : p))
     setPlayers(next)
     saveLineup(match.id, teamId, next.filter((p) => p.athleteId === outId || p.athleteId === inId), serverIso())
-    setSubOpen(false)
     setToast(`${minuteLabel(at.period, at.clockSeconds)} · sai ${nameOf(outId)}, entra ${nameOf(inId)}`)
   }
 
@@ -305,6 +355,13 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   const scoreAgainst = team.goalsAgainst
   const running = match.clockRunning
 
+  const inPlay = match.phase === 'first' || match.phase === 'second'
+  const periodText = inPlay ? (match.period === 1 ? '1ºT' : '2ºT') : PHASE_LABEL[match.phase]
+  const filtered = (list: MatchPlayer[]) => list.filter((p) => sector === 'ALL' || p.sector === sector).sort(byTacticalOrder)
+  const fieldList = filtered(onField)
+  const benchList = filtered(players.filter((p) => !p.onField))
+  const groups = GROUP_ORDER.map((g) => ({ group: g, list: fieldList.filter((p) => groupOf(p.positions) === g) })).filter((g) => g.list.length)
+
   return (
     <div className="live-shell">
       <header className="live-bar">
@@ -315,14 +372,22 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
             <strong>{scoreFor}<i>×</i>{scoreAgainst}</strong>
             <span className="live-team">{match.opponent || 'Adversário'}</span>
           </div>
-          {(() => {
-            const inPlay = match.phase === 'first' || match.phase === 'second'
-            const body = <><small>{inPlay ? (match.period === 1 ? '1ºT' : '2ºT') : PHASE_LABEL[match.phase]}{inPlay && !running ? ' · pausado' : ''}</small><strong>{formatClock(seconds)}</strong></>
-            return isCommander && inPlay
-              ? <button className={`live-clock ${running ? 'running' : 'paused'}`} onClick={() => setAdjustOpen(true)} type="button" aria-label={`Cronômetro ${formatClock(seconds)}. Tocar para ajustar`}>{body}</button>
-              : <div className={`live-clock ${running ? 'running' : inPlay ? 'paused' : ''}`} role="timer" aria-live="off">{body}</div>
-          })()}
+          <div className={`live-clock big ${running ? 'running' : inPlay ? 'paused' : ''}`} role="timer" aria-live="off" aria-label={`${periodText} ${formatClock(seconds)}${inPlay && !running ? ', pausado' : ''}`}>
+            <small>{periodText}{inPlay && !running ? ' · pausado' : ''}</small>
+            <strong>{formatClock(seconds)}</strong>
+          </div>
         </div>
+        {isCommander && match.status !== 'finished' && view === 'live' && (
+          <div className="clock-controls" aria-label="Controles do cronômetro">
+            {match.phase === 'pre' && <button className="primary-button" onClick={() => startPeriod(1)} type="button"><Play size={16} /> Iniciar 1ºT</button>}
+            {match.phase === 'break' && <button className="primary-button" onClick={() => startPeriod(2)} type="button"><Play size={16} /> Iniciar 2ºT</button>}
+            {inPlay && (running
+              ? <button className="secondary-button" onClick={pause} type="button"><Pause size={16} /> Pausar</button>
+              : <button className="primary-button" onClick={resume} type="button"><Play size={16} /> Retomar</button>)}
+            {inPlay && <button className="secondary-button" onClick={endPeriod} type="button"><Square size={13} /> Encerrar {match.period === 1 ? '1ºT' : '2ºT'}</button>}
+            {inPlay && <ClockAdjust seconds={seconds} onSave={adjustClock} onReset={resetClock} />}
+          </div>
+        )}
         <div className="live-bar-meta">
           {isCommander ? <span className="live-command me"><Crown size={13} /> Você comanda</span> : <span className="live-command"><Crown size={13} /> Comando: {match.commanderName || '—'}</span>}
           {!isCommander && !readOnly && match.status !== 'finished' && <button className="link-button" onClick={takeCommand} type="button">Assumir comando</button>}
@@ -341,82 +406,107 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
       )}
 
       {view === 'live' && (
-        <>
-          {isCommander && match.status !== 'finished' && (
-            <section className="live-command-panel" aria-label="Controles do comando">
-              <div className="cmd-clock">
-                {match.phase === 'pre' && <button className="primary-button cmd-main" onClick={() => startPeriod(1)} type="button"><Play size={18} /> Iniciar 1ºT</button>}
-                {match.phase === 'break' && <button className="primary-button cmd-main" onClick={() => startPeriod(2)} type="button"><Play size={18} /> Iniciar 2ºT</button>}
-                {(match.phase === 'first' || match.phase === 'second') && (running
-                  ? <button className="secondary-button cmd-main" onClick={pause} type="button"><Pause size={18} /> Pausar</button>
-                  : <button className="primary-button cmd-main" onClick={resume} type="button"><Play size={18} /> Retomar</button>)}
-                {(match.phase === 'first' || match.phase === 'second') && <button className="secondary-button" onClick={endPeriod} type="button"><Square size={14} /> Encerrar {match.period === 1 ? '1ºT' : '2ºT'}</button>}
+        <div className="live-grid">
+          <aside className="live-col live-col-left">
+            <section className="panel roster-panel" aria-label="Elenco do jogo">
+              <div className="panel-head"><strong>Elenco</strong><small>{onField.length} em campo · {players.length} na relação</small>{isCommander && <button className="secondary-button compact" onClick={() => setView('lineup')} type="button"><Users size={14} /> Relação</button>}</div>
+              <div className="seg roster-seg" role="tablist">
+                <button role="tab" aria-selected={!rosterAll} className={!rosterAll ? 'on' : ''} onClick={() => setRosterAll(false)} type="button">Em campo ({onField.length})</button>
+                <button role="tab" aria-selected={rosterAll} className={rosterAll ? 'on' : ''} onClick={() => setRosterAll(true)} type="button">Todos ({players.length})</button>
               </div>
-              <div className="live-team-actions">
-                {TEAM_ACTIONS.map((a) => (
-                  <button key={a.kind} className={`team-action ${a.kind} ${flash === `team:${a.kind}` ? 'flash' : ''}`} onClick={() => tap(a.kind, null)} type="button" aria-label={`${a.label}: registrar`}>
-                    <span>{a.kind === 'corner_for' ? 'Escanteio a favor' : a.kind === 'corner_against' ? 'Escanteio contra' : 'Gol sofrido'}</span><b>{a.kind === 'corner_for' ? team.cornersFor : a.kind === 'corner_against' ? team.cornersAgainst : team.goalsAgainst}</b>
-                  </button>
+              <ul className="roster-list">
+                {(rosterAll ? [...players] : onField).sort(byTacticalOrder).map((p) => (
+                  <li key={p.athleteId} className={p.onField ? 'on' : ''}><span className="live-number">{p.number || '—'}</span><strong>{p.athleteName}</strong><small>{primaryPosition(p.positions) ?? '—'}</small>{p.onField && <Check size={14} aria-label="em campo" />}</li>
+                ))}
+              </ul>
+            </section>
+          </aside>
+
+          <main className="live-col live-col-center">
+            <div className="sector-chips" role="tablist" aria-label="Filtrar por setor">
+              {[{ id: 'ALL' as const, label: 'Todos' }, ...SECTORS].map((s) => (
+                <button key={s.id} role="tab" aria-selected={sector === s.id} className={sector === s.id ? 'active' : ''} onClick={() => setSector(s.id)} type="button">
+                  {s.label}<b>{s.id === 'ALL' ? onField.length : onField.filter((p) => p.sector === s.id).length}</b>
+                </button>
+              ))}
+            </div>
+
+            {players.length === 0 ? (
+              <div className="live-empty">{isCommander ? <><p>Monte a relação do jogo para começar.</p><button className="primary-button" onClick={() => setView('lineup')} type="button"><Users size={16} /> Montar relação</button></> : <p>Aguardando o comando montar a relação. A tela atualiza sozinha.</p>}</div>
+            ) : fieldList.length === 0 ? (
+              <div className="live-empty"><p>Nenhum atleta em campo neste setor.</p></div>
+            ) : (
+              <div className="live-players">
+                {groups.map(({ group, list }) => (
+                  <section key={group} className="pos-group" aria-label={group}>
+                    <h3 className="pos-title">{group}</h3>
+                    {list.map((p) => <PlayerCard key={p.athleteId} player={p} totals={totals.get(p.athleteId)} minutes={liveMinutes.get(p.athleteId) ?? 0} canRecord={canRecord} flash={flash} canUndo={(kind) => canUndo(p.athleteId, kind)} onPlus={(kind) => tap(kind, p.athleteId)} onMinus={(kind) => undoAction(p.athleteId, kind)} />)}
+                  </section>
                 ))}
               </div>
-              <div className="cmd-tools">
-                <button onClick={() => setSubOpen(true)} type="button" disabled={match.phase === 'pre'}><ArrowLeftRight size={16} /><span>Substituir</span></button>
-                <button onClick={() => setView('lineup')} type="button"><Users size={16} /><span>Relação</span></button>
-                <button onClick={() => setView('summary')} type="button"><Flag size={16} /><span>Resumo</span></button>
-                <button className="finish" onClick={() => void finishMatch()} type="button"><Check size={16} /><span>Finalizar</span></button>
-              </div>
-            </section>
-          )}
-
-          {!isCommander && match.status === 'finished' && <button className="secondary-button" onClick={() => setView('summary')} type="button">Ver resumo do jogo</button>}
-
-          <div className="sector-chips" role="tablist" aria-label="Setor">
-            {[...SECTORS, { id: 'ALL' as const, label: 'Todos' }].map((s) => (
-              <button key={s.id} role="tab" aria-selected={sector === s.id} className={sector === s.id ? 'active' : ''} onClick={() => setSector(s.id)} type="button">
-                {s.label}<b>{s.id === 'ALL' ? onField.length : onField.filter((p) => p.sector === s.id).length}</b>
-              </button>
-            ))}
-          </div>
-
-          {players.length === 0 ? (
-            <div className="live-empty">{isCommander ? <><p>Monte a relação do jogo para começar.</p><button className="primary-button" onClick={() => setView('lineup')} type="button"><Users size={16} /> Montar relação</button></> : <p>Aguardando o comando montar a relação. A tela atualiza sozinha.</p>}</div>
-          ) : visible.length === 0 ? (
-            <div className="live-empty"><p>Nenhum atleta em campo neste setor.</p></div>
-          ) : (
-            <div className="live-players">
-              {visible.map((p) => {
-                const t = totals.get(p.athleteId)
-                const sum = t ? Object.values(t).reduce((a, b) => a + b, 0) : 0
-                return (
-                  <article className="live-player" key={p.athleteId}>
-                    <header><span className="live-number">{p.number || '—'}</span><strong>{p.athleteName}</strong><small>{SECTORS.find((s) => s.id === p.sector)?.label}</small><b className="live-sum">{sum}</b></header>
-                    <div className="live-actions">
-                      {PLAYER_ACTIONS.map((a) => (
-                        <button key={a.kind} className={`live-action tone-${a.tone} ${flash === `${p.athleteId}:${a.kind}` ? 'flash' : ''}`} onClick={() => tap(a.kind, p.athleteId)} disabled={!canRecord} type="button" aria-label={`${a.label}: ${p.athleteName}`}>
-                          <span>{a.short}</span><b>{t ? t[a.metric] : 0}</b>
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          )}
-
-          <section className="live-mine">
-            <div className="live-mine-head">
-              <strong>Minhas últimas ações</strong>
-              <button className="secondary-button compact" onClick={undoMine} disabled={!myEvents.length || !canRecord} type="button"><Undo2 size={14} /> Desfazer meu último</button>
-            </div>
-            {myEvents.length === 0 ? <p className="live-muted">Nenhuma ação sua ainda.</p> : (
-              <ol>{myEvents.slice(-6).reverse().map((e) => <li key={e.id}><span>{minuteLabel(e.period, e.clockSeconds)}</span><strong>{actionLabel(e.kind)}</strong><small>{e.athleteId ? nameOf(e.athleteId) : 'Time'}</small></li>)}</ol>
             )}
-          </section>
-        </>
+
+            {benchList.length > 0 && (
+              <details className="bench">
+                <summary>Reservas <b>{benchList.length}</b></summary>
+                <div className="live-players">
+                  {benchList.map((p) => <PlayerCard key={p.athleteId} player={p} totals={totals.get(p.athleteId)} minutes={liveMinutes.get(p.athleteId) ?? 0} canRecord={false} flash="" canUndo={() => false} onPlus={() => {}} onMinus={() => {}} />)}
+                </div>
+              </details>
+            )}
+
+            <section className="panel stats-panel order-stats" aria-label="Estatísticas da partida">
+              <div className="panel-head"><strong>Estatísticas da partida</strong></div>
+              <StatsTable events={events} />
+            </section>
+          </main>
+
+          <aside className="live-col live-col-right">
+            <section className="panel order-team" aria-label="Ações coletivas">
+              <div className="panel-head"><strong>Ações coletivas</strong><small>equipe</small></div>
+              <div className="live-team-actions">
+                {TEAM_ACTIONS.map((a) => {
+                  const value = a.kind === 'corner_for' ? team.cornersFor : a.kind === 'corner_against' ? team.cornersAgainst : team.goalsAgainst
+                  const label = a.kind === 'corner_for' ? 'Escanteio a favor' : a.kind === 'corner_against' ? 'Escanteio contra' : 'Gol sofrido'
+                  return isCommander && canRecord
+                    ? <button key={a.kind} className={`team-action ${a.kind} ${flash === `team:${a.kind}` ? 'flash' : ''}`} onClick={() => tap(a.kind, null)} type="button" aria-label={`${label}: registrar`}><span>{label}</span><b>{value}</b></button>
+                    : <div key={a.kind} className={`team-action ${a.kind} readonly`}><span>{label}</span><b>{value}</b></div>
+                })}
+              </div>
+              {!isCommander && <p className="live-muted">Escanteios e gol sofrido: só o comando registra.</p>}
+            </section>
+
+            {isCommander && match.status !== 'finished' && (
+              <section className="panel order-subs" aria-label="Substituições">
+                <div className="panel-head"><strong>Substituições</strong><small>{match.phase === 'pre' ? 'depois do início' : minuteLabel(stamp().period, stamp().clockSeconds)}</small><button className="secondary-button compact" onClick={() => setView('lineup')} type="button"><Users size={14} /> Relação</button></div>
+                <div className="sub-inline">
+                  <label><span>Sai do campo</span><select className="chip-select" value={subOut} onChange={(e) => setSubOut(e.target.value)}><option value="">Selecione</option>{[...onField].sort(byTacticalOrder).map((p) => <option key={p.athleteId} value={p.athleteId}>{p.number ? `${p.number} · ` : ''}{p.athleteName}</option>)}</select></label>
+                  <label><span>Entra em campo</span><select className="chip-select" value={subIn} onChange={(e) => setSubIn(e.target.value)}><option value="">Selecione</option>{players.filter((p) => !p.onField).sort(byTacticalOrder).map((p) => <option key={p.athleteId} value={p.athleteId}>{p.number ? `${p.number} · ` : ''}{p.athleteName}</option>)}</select></label>
+                </div>
+                <button className="primary-button full-button" disabled={!subOut || !subIn || match.phase === 'pre'} onClick={() => { substitute(subOut, subIn); setSubOut(''); setSubIn('') }} type="button"><ArrowLeftRight size={16} /> Registrar substituição</button>
+              </section>
+            )}
+
+            <section className="panel order-history" aria-label="Histórico de eventos">
+              <div className="panel-head"><strong>Histórico de eventos</strong><small>{history.length}</small><button className="secondary-button compact" onClick={() => setHistoryOpen((v) => !v)} type="button">{historyOpen ? 'Ocultar' : 'Mostrar'}</button></div>
+              {historyOpen && (history.length === 0 ? <p className="live-muted">Nenhum evento ainda.</p> : (
+                <ol className="timeline">{history.slice(0, 80).map((e) => <li key={e.id} className={e.createdBy === user.id ? 'mine' : ''}><span>{minuteLabel(e.period, e.clockSeconds)}</span><strong>{actionLabel(e.kind)}</strong><small>{e.athleteId ? nameOf(e.athleteId) : 'Equipe'}{e.createdByName ? ` · ${e.createdBy === user.id ? 'você' : e.createdByName}` : ''}</small></li>)}</ol>
+              ))}
+            </section>
+          </aside>
+        </div>
       )}
 
-      {subOpen && <SubstitutionDialog players={players} onConfirm={substitute} onClose={() => setSubOpen(false)} label={minuteLabel(stamp().period, stamp().clockSeconds)} />}
-      {adjustOpen && <AdjustDialog seconds={seconds} onSave={adjustClock} onClose={() => setAdjustOpen(false)} />}
+      {view === 'live' && (
+        <footer className="live-footer">
+          <button onClick={undoMine} disabled={!myEvents.length || !canRecord} type="button"><Undo2 size={16} /><span>Desfazer meu último</span></button>
+          <button onClick={() => setView('summary')} type="button"><Flag size={16} /><span>Resumo</span></button>
+          <button onClick={() => void copyReport()} type="button"><Copy size={16} /><span>Copiar relatório</span></button>
+          {isCommander && match.status !== 'finished' && <button className="finish" onClick={() => void finishMatch()} type="button"><Check size={16} /><span>Finalizar partida</span></button>}
+          {match.status === 'finished' && <button onClick={() => setView('summary')} type="button"><Check size={16} /><span>Jogo finalizado</span></button>}
+        </footer>
+      )}
+
       {toast && <div className="toast live-toast"><Check size={16} /> {toast}</div>}
     </div>
   )
@@ -434,7 +524,7 @@ function LineupEditor({ athletes, players, started, onSave, onCancel }: { athlet
   const set = (id: string, patch: Partial<{ choice: LineupChoice; sector: Sector }>) => setChoices((m) => new Map(m).set(id, { ...(m.get(id) as { choice: LineupChoice; sector: Sector }), ...patch }))
   const starters = [...choices.values()].filter((c) => c.choice === 'starter').length
   const reserves = [...choices.values()].filter((c) => c.choice === 'reserve').length
-  const sorted = [...athletes].sort((a, b) => (Number(a.number) || 999) - (Number(b.number) || 999) || a.name.localeCompare(b.name))
+  const sorted = [...athletes].sort(byTacticalOrder)
   return (
     <section className="lineup">
       <div className="lineup-head">
@@ -471,44 +561,6 @@ function LineupEditor({ athletes, players, started, onSave, onCancel }: { athlet
   )
 }
 
-/* ---------- substituição ---------- */
-function SubstitutionDialog({ players, label, onConfirm, onClose }: { players: MatchPlayer[]; label: string; onConfirm: (out: string, inn: string) => void; onClose: () => void }) {
-  const [out, setOut] = useState('')
-  const [inn, setInn] = useState('')
-  const field = players.filter((p) => p.onField).sort(byNumber)
-  const bench = players.filter((p) => !p.onField).sort(byNumber)
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Substituição">
-      <div className="report-modal live-dialog">
-        <div className="form-heading"><div><strong>Substituição</strong><small>Registrada em {label}</small></div><button className="icon-button" onClick={onClose} type="button" aria-label="Fechar"><X size={17} /></button></div>
-        <div className="sub-cols">
-          <div><span className="eyebrow">Sai</span>{field.map((p) => <button key={p.athleteId} className={`sub-pick ${out === p.athleteId ? 'on out' : ''}`} onClick={() => setOut(p.athleteId)} type="button"><b>{p.number || '—'}</b> {p.athleteName}</button>)}</div>
-          <div><span className="eyebrow">Entra</span>{bench.length === 0 ? <p className="live-muted">Sem reservas na relação.</p> : bench.map((p) => <button key={p.athleteId} className={`sub-pick ${inn === p.athleteId ? 'on in' : ''}`} onClick={() => setInn(p.athleteId)} type="button"><b>{p.number || '—'}</b> {p.athleteName}</button>)}</div>
-        </div>
-        <button className="primary-button full-button" disabled={!out || !inn} onClick={() => onConfirm(out, inn)} type="button"><ArrowLeftRight size={16} /> Confirmar substituição</button>
-      </div>
-    </div>
-  )
-}
-
-/* ---------- ajuste do relógio ---------- */
-function AdjustDialog({ seconds, onSave, onClose }: { seconds: number; onSave: (total: number) => void; onClose: () => void }) {
-  const [min, setMin] = useState(String(Math.floor(seconds / 60)))
-  const [sec, setSec] = useState(String(seconds % 60))
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Ajustar cronômetro">
-      <div className="report-modal live-dialog">
-        <div className="form-heading"><div><strong>Ajustar cronômetro</strong><small>Vale para todos os celulares</small></div><button className="icon-button" onClick={onClose} type="button" aria-label="Fechar"><X size={17} /></button></div>
-        <div className="adjust-row">
-          <label>Minutos<input inputMode="numeric" value={min} onChange={(e) => setMin(e.target.value.replace(/\D/g, ''))} /></label>
-          <label>Segundos<input inputMode="numeric" value={sec} onChange={(e) => setSec(e.target.value.replace(/\D/g, ''))} /></label>
-        </div>
-        <button className="primary-button full-button" onClick={() => onSave((Number(min) || 0) * 60 + Math.min(59, Number(sec) || 0))} type="button"><Check size={16} /> Salvar</button>
-      </div>
-    </div>
-  )
-}
-
 /* ---------- resumo ---------- */
 function MatchSummary({ match, players, events, clubName, finished, onBack }: { match: MatchRow; players: MatchPlayer[]; events: MatchEvent[]; clubName: string; finished: boolean; onBack: () => void }) {
   const live = match.phase === 'first' || match.phase === 'second' ? { period: match.period, seconds: clockSeconds(match, Date.now()) } : undefined
@@ -517,7 +569,7 @@ function MatchSummary({ match, players, events, clubName, finished, onBack }: { 
   const second = collective(events, 2)
   const total = collective(events)
   const byPlayer = playerTotals(events)
-  const rows = players.filter((p) => (minutes.get(p.athleteId) ?? 0) > 0 || byPlayer.has(p.athleteId)).sort(byNumber)
+  const rows = players.filter((p) => (minutes.get(p.athleteId) ?? 0) > 0 || byPlayer.has(p.athleteId)).sort(byTacticalOrder)
   const warnings = rows.flatMap((p) => sessionTotals(byPlayer.get(p.athleteId) ?? emptyGame()).warnings.map((w) => `${p.athleteName}: ${w}`))
   const lines: Array<[string, (c: ReturnType<typeof collective>) => number]> = [
     ...GAME_KEYS.map((k) => [GAME_LABELS[k], (c: ReturnType<typeof collective>) => c[k]] as [string, (c: ReturnType<typeof collective>) => number]),
@@ -541,4 +593,102 @@ function MatchSummary({ match, players, events, clubName, finished, onBack }: { 
       <ol className="timeline">{timeline.map((e) => <li key={e.id}><span>{minuteLabel(e.period, e.clockSeconds)}</span><strong>{actionLabel(e.kind)}</strong><small>{e.athleteId ? players.find((p) => p.athleteId === e.athleteId)?.athleteName ?? '' : 'Time'}{e.createdByName ? ` · por ${e.createdByName}` : ''}</small></li>)}</ol>
     </section>
   )
+}
+
+/* ---------- cartão do atleta ---------- */
+function PlayerCard({ player, totals, minutes, canRecord, flash, canUndo, onPlus, onMinus }: {
+  player: MatchPlayer; totals: ReturnType<typeof playerTotals> extends Map<string, infer T> ? T | undefined : never; minutes: number; canRecord: boolean; flash: string
+  canUndo: (kind: PlayerAction) => boolean; onPlus: (kind: PlayerAction) => void; onMinus: (kind: PlayerAction) => void
+}) {
+  const code = primaryPosition(player.positions)
+  return (
+    <article className={`live-player ${player.onField ? '' : 'benched'}`}>
+      <header>
+        <span className="live-number">{player.number || '—'}</span>
+        <strong>{player.athleteName}</strong>
+        <small className="pos-code">{code ?? 'sem posição'}</small>
+        <b className="live-min" title="Minutos jogados">{roundMinutes(minutes)}'</b>
+      </header>
+      <div className="act-grid">
+        {PLAYER_ACTIONS.map((a) => {
+          const value = totals ? totals[a.metric] : 0
+          return (
+            <div key={a.kind} className={`act tone-${a.tone} ${flash === `${player.athleteId}:${a.kind}` ? 'flash' : ''}`}>
+              <button className="act-minus" onClick={() => onMinus(a.kind)} disabled={!canUndo(a.kind)} type="button" aria-label={`Desfazer ${a.label}: ${player.athleteName}`}><Minus size={15} /></button>
+              <button className="act-plus" onClick={() => onPlus(a.kind)} disabled={!canRecord} type="button" aria-label={`${a.label}: ${player.athleteName}`}>
+                <span className="act-label"><span className="full">{a.label}</span><span className="short">{a.short}</span></span>
+                <b className="act-value">{value}</b>
+                <i className="act-icon" aria-hidden="true"><Plus size={15} /></i>
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </article>
+  )
+}
+
+/* ---------- ajuste do cronômetro, em linha ---------- */
+function ClockAdjust({ seconds, onSave, onReset }: { seconds: number; onSave: (total: number) => void; onReset: () => void }) {
+  const [min, setMin] = useState('')
+  const [sec, setSec] = useState('')
+  const dirty = min !== '' || sec !== ''
+  const save = () => {
+    const m = min === '' ? Math.floor(seconds / 60) : Number(min) || 0
+    const s = sec === '' ? seconds % 60 : Math.min(59, Number(sec) || 0)
+    onSave(m * 60 + s)
+    setMin('')
+    setSec('')
+  }
+  return (
+    <div className="clock-adjust">
+      <label><span>Min</span><input inputMode="numeric" value={min} placeholder={String(Math.floor(seconds / 60))} onChange={(e) => setMin(e.target.value.replace(/\D/g, '').slice(0, 3))} aria-label="Minutos" /></label>
+      <label><span>Seg</span><input inputMode="numeric" value={sec} placeholder={String(seconds % 60).padStart(2, '0')} onChange={(e) => setSec(e.target.value.replace(/\D/g, '').slice(0, 2))} aria-label="Segundos" /></label>
+      <button className="icon-button" onClick={save} disabled={!dirty} type="button" aria-label="Confirmar ajuste do cronômetro"><Check size={16} /></button>
+      <button className="icon-button" onClick={onReset} type="button" aria-label="Zerar cronômetro"><RotateCcw size={15} /></button>
+    </div>
+  )
+}
+
+/* ---------- tabela 1ºT | 2ºT | Total ---------- */
+function StatsTable({ events }: { events: MatchEvent[] }) {
+  const first = collective(events, 1)
+  const second = collective(events, 2)
+  const total = collective(events)
+  type C = ReturnType<typeof collective>
+  const lines: Array<[string, (c: C) => number]> = [
+    ...PLAYER_ACTIONS.map((a) => [a.label, (c: C) => c[a.metric]] as [string, (c: C) => number]),
+    ['Escanteio a favor', (c) => c.cornersFor], ['Escanteio contra', (c) => c.cornersAgainst], ['Gol sofrido', (c) => c.goalsAgainst],
+  ]
+  return (
+    <div className="table-wrap"><table className="perf-table summary-table"><thead><tr><th>Ação</th><th>1ºT</th><th>2ºT</th><th>Total</th></tr></thead><tbody>
+      {lines.map(([label, get]) => <tr key={label}><td>{label}</td><td>{get(first)}</td><td>{get(second)}</td><td><strong>{get(total)}</strong></td></tr>)}
+    </tbody></table></div>
+  )
+}
+
+/* ---------- relatório em texto ---------- */
+function reportText(match: MatchRow, players: MatchPlayer[], events: MatchEvent[], clubName: string, date: string) {
+  const total = collective(events)
+  const first = collective(events, 1)
+  const second = collective(events, 2)
+  const minutes = minutesPlayed(players, events)
+  const byPlayer = playerTotals(events)
+  const [y, m, d] = date.split('-')
+  const lines = [
+    `${clubName || 'Nós'} ${total.goalsFor} × ${total.goalsAgainst} ${match.opponent || 'Adversário'} · ${d}/${m}/${y}`,
+    '',
+    'COLETIVO (1ºT / 2ºT / Total)',
+    ...PLAYER_ACTIONS.map((a) => `${a.label}: ${first[a.metric]} / ${second[a.metric]} / ${total[a.metric]}`),
+    `Escanteio a favor: ${first.cornersFor} / ${second.cornersFor} / ${total.cornersFor}`,
+    `Escanteio contra: ${first.cornersAgainst} / ${second.cornersAgainst} / ${total.cornersAgainst}`,
+    '',
+    'POR ATLETA',
+    ...[...players].sort(byTacticalOrder).filter((p) => (minutes.get(p.athleteId) ?? 0) > 0 || byPlayer.has(p.athleteId)).map((p) => {
+      const t = byPlayer.get(p.athleteId)
+      const parts = PLAYER_ACTIONS.filter((a) => (t?.[a.metric] ?? 0) > 0).map((a) => `${a.label} ${t?.[a.metric]}`)
+      return `${p.number ? `${p.number} ` : ''}${p.athleteName} (${primaryPosition(p.positions) ?? '—'}, ${roundMinutes(minutes.get(p.athleteId) ?? 0)}'): ${parts.join(', ') || 'sem ações'}`
+    }),
+  ]
+  return lines.join('\n')
 }

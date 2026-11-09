@@ -86,22 +86,91 @@ export const isPlayerAction = (kind: EventKind): kind is PlayerAction => PLAYER_
 
 /* ---------- setor ---------- */
 
-const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-const SECTOR_RULES: Array<[Sector, RegExp]> = [
-  ['DEF', /^(goleir|gk$|zag|lateral|ld$|le$|defens|beque|libero|ala$|alas$)/],
-  ['MEI', /^(volant|vol$|mei|medio|armador|mc$|meio)/],
-  ['ATA', /^(atacant|ponta|centroavant|ca$|extrem|ponteir|pd$|pe$|avante|ataque)/],
-]
+const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
-/** Setor sugerido a partir do texto de posições. Vale a primeira posição reconhecida (a principal). */
-export function suggestSector(positions: string): Sector {
-  const parts = normalize(positions).split(/[,/;|]+/).map((p) => p.trim()).filter(Boolean)
-  for (const part of parts) {
-    for (const word of part.split(/[\s-]+/)) {
-      for (const [sector, rule] of SECTOR_RULES) if (rule.test(word)) return sector
-    }
+/* ---------- posição ---------- */
+
+export type PositionCode = 'GOL' | 'LD' | 'ZAG' | 'LE' | 'VOL' | 'MC' | 'MD' | 'ME' | 'MEI' | 'PD' | 'PE' | 'ATA'
+export type PositionGroup = 'Goleiro' | 'Defesa' | 'Meio-campo' | 'Ataque' | 'Sem posição'
+
+/** Na ordem tática: Goleiro → LD → Zagueiros → LE → Volantes → Meias centrais → Meias pelos lados → Meia ofensivo → Pontas → Atacantes. */
+export const POSITIONS: Array<{ code: PositionCode; label: string; sector: Sector; group: PositionGroup }> = [
+  { code: 'GOL', label: 'Goleiro', sector: 'DEF', group: 'Goleiro' },
+  { code: 'LD', label: 'Lateral direito', sector: 'DEF', group: 'Defesa' },
+  { code: 'ZAG', label: 'Zagueiro', sector: 'DEF', group: 'Defesa' },
+  { code: 'LE', label: 'Lateral esquerdo', sector: 'DEF', group: 'Defesa' },
+  { code: 'VOL', label: 'Volante', sector: 'MEI', group: 'Meio-campo' },
+  { code: 'MC', label: 'Meia central', sector: 'MEI', group: 'Meio-campo' },
+  { code: 'MD', label: 'Meia direita', sector: 'MEI', group: 'Meio-campo' },
+  { code: 'ME', label: 'Meia esquerda', sector: 'MEI', group: 'Meio-campo' },
+  { code: 'MEI', label: 'Meia ofensivo', sector: 'MEI', group: 'Meio-campo' },
+  { code: 'PD', label: 'Ponta direita', sector: 'ATA', group: 'Ataque' },
+  { code: 'PE', label: 'Ponta esquerda', sector: 'ATA', group: 'Ataque' },
+  { code: 'ATA', label: 'Atacante', sector: 'ATA', group: 'Ataque' },
+]
+export const GROUP_ORDER: PositionGroup[] = ['Goleiro', 'Defesa', 'Meio-campo', 'Ataque', 'Sem posição']
+const BY_CODE = new Map(POSITIONS.map((p, i) => [p.code, { ...p, index: i }]))
+export const positionLabel = (code: PositionCode) => BY_CODE.get(code)?.label ?? code
+
+/** Reconhece uma posição: rótulo da lista, sigla ou texto antigo livre ("Centroavante", "lateral esq."). */
+function codeFromPart(part: string): PositionCode | null {
+  const p = normalize(part)
+  if (!p) return null
+  for (const pos of POSITIONS) if (p === normalize(pos.label) || p === pos.code.toLowerCase()) return pos.code
+  const rules: Array<[PositionCode, RegExp]> = [
+    ['GOL', /\b(goleir|gk\b|arqueir)/],
+    ['LD', /\blateral[\s-]*(direit|dir\b|d\b)|\bld\b/],
+    ['LE', /\blateral[\s-]*(esquerd|esq\b|e\b)|\ble\b/],
+    ['ZAG', /\b(zag|beque|defensor|libero|central defens)/],
+    ['MEI', /\b(meia[\s-]*(ofensiv|atacant|armador)|armador|enganche|camisa 10)/],
+    ['MD', /\bmeia[\s-]*(direit|dir\b)|\bmd\b/],
+    ['ME', /\bmeia[\s-]*(esquerd|esq\b)|\bme\b/],
+    ['VOL', /\b(volant|vol\b|primeiro volante|cabeca de area)/],
+    ['MC', /\b(meia|meio|medio|mc\b)/],
+    ['PD', /\b(ponta|extremo|ponteir)[\s-]*(direit|dir\b)|\bpd\b/],
+    ['PE', /\b(ponta|extremo|ponteir)[\s-]*(esquerd|esq\b)|\bpe\b/],
+    ['PD', /\b(ponta|extremo|ponteir)/],
+    ['ATA', /\b(atacant|centroavant|centro-avant|avante|ca\b|ataque|camisa 9)/],
+    ['LD', /\b(lateral|ala\b)/],
+  ]
+  for (const [code, rule] of rules) if (rule.test(p)) return code
+  return null
+}
+
+/** Posições do atleta (texto `positions`, separado por vírgula). A primeira é a principal. */
+export function positionCodes(positions: string): PositionCode[] {
+  const codes: PositionCode[] = []
+  for (const part of positions.split(/[,/;|]+/)) {
+    const code = codeFromPart(part)
+    if (code && !codes.includes(code)) codes.push(code)
   }
-  return 'MEI'
+  return codes
+}
+export const primaryPosition = (positions: string): PositionCode | null => positionCodes(positions)[0] ?? null
+export const sectorOf = (code: PositionCode): Sector => BY_CODE.get(code)?.sector ?? 'MEI'
+export const groupOf = (positions: string): PositionGroup => {
+  const code = primaryPosition(positions)
+  return code ? (BY_CODE.get(code)?.group ?? 'Sem posição') : 'Sem posição'
+}
+/** Texto gravado no cadastro: "Zagueiro" ou "Zagueiro, Lateral direito". */
+export const positionsText = (primary: PositionCode, secondary?: PositionCode | '') =>
+  secondary && secondary !== primary ? `${positionLabel(primary)}, ${positionLabel(secondary)}` : positionLabel(primary)
+
+/** Setor sugerido para a relação: vem da posição principal. Sem posição reconhecida: Meio. */
+export function suggestSector(positions: string): Sector {
+  const code = primaryPosition(positions)
+  return code ? sectorOf(code) : 'MEI'
+}
+
+/** Ordem tática fixa; dentro da mesma posição, pelo número da camisa; sem posição vai para o fim. */
+export function byTacticalOrder<T extends { positions: string; number: string; name?: string; athleteName?: string }>(a: T, b: T): number {
+  const ia = BY_CODE.get(primaryPosition(a.positions) as PositionCode)?.index ?? 99
+  const ib = BY_CODE.get(primaryPosition(b.positions) as PositionCode)?.index ?? 99
+  if (ia !== ib) return ia - ib
+  const na = Number.parseInt(a.number, 10)
+  const nb = Number.parseInt(b.number, 10)
+  if ((Number.isNaN(na) ? 999 : na) !== (Number.isNaN(nb) ? 999 : nb)) return (Number.isNaN(na) ? 999 : na) - (Number.isNaN(nb) ? 999 : nb)
+  return (a.name ?? a.athleteName ?? '').localeCompare(b.name ?? b.athleteName ?? '')
 }
 
 /* ---------- cronômetro ---------- */
