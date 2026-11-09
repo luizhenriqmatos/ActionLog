@@ -10,7 +10,7 @@ const game = (date: string, g: Partial<SessionRecord['stats']['game']>, athleteI
   id: `${date}-${athleteId}-g`, createdAt: `${date}T10:00:00Z`, category: 'Sub-15', mode: 'game', athleteId, athleteName: 'Atleta',
   dominantFootSnapshot: 'Direita', calendarDate: date, periodizationTag: 'MD', eventTitle: '', eventId: '', eventType: 'Jogo', schemaVersion: 2,
   stats: {
-    game: { goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, ...g },
+    game: { goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0, ...g },
     finishing: { dominantFinishes: 0, dominantOnTarget: 0, dominantGoals: 0, nonDominantFinishes: 0, nonDominantOnTarget: 0, nonDominantGoals: 0 },
   },
 })

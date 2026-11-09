@@ -21,6 +21,7 @@ export type GameMetric =
   | 'possessionLoss'
   | 'foulsCommitted'
   | 'foulsSuffered'
+  | 'interceptions'
 
 /**
  * Contagens do Treino de Finalização por perna.
@@ -82,6 +83,10 @@ export type SessionRecord = {
   stats: Stats
   /** Valor do antigo contador "Passes" (v2.1), preservado só para consulta. Não entra nas taxas. */
   legacyPasses?: number
+  /** Minutos em campo (só sessões geradas pelo Jogo ao vivo). */
+  minutesPlayed?: number | null
+  /** Jogo ao vivo que gerou a sessão. */
+  matchId?: string | null
   schemaVersion: 2
 }
 
@@ -134,6 +139,7 @@ export const GAME_KEYS: GameMetric[] = [
   'possessionLoss',
   'foulsCommitted',
   'foulsSuffered',
+  'interceptions',
 ]
 
 export const FINISHING_KEYS: FinishingMetric[] = [
@@ -156,6 +162,7 @@ export const GAME_LABELS: Record<GameMetric, string> = {
   possessionLoss: 'Perdas da posse',
   foulsCommitted: 'Faltas cometidas',
   foulsSuffered: 'Faltas sofridas',
+  interceptions: 'Interceptações',
 }
 
 export const EMPTY_GAME: Record<GameMetric, number> = {
@@ -169,6 +176,7 @@ export const EMPTY_GAME: Record<GameMetric, number> = {
   possessionLoss: 0,
   foulsCommitted: 0,
   foulsSuffered: 0,
+  interceptions: 0,
 }
 
 export const EMPTY_FINISHING: Record<FinishingMetric, number> = {
