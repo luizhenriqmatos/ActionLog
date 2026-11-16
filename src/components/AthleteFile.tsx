@@ -3,6 +3,7 @@ import type { Athlete, Evaluation, SessionRecord } from '../types'
 import { CRITERIA, GROUPS, TREND_LABEL, forAthlete, formatScore, groupAverage, overall, trend } from '../lib/evaluations'
 import { type EvolutionPoint, evolution, finishingRates, formatPct, gameRates, sumFinishing, sumGame } from '../lib/metrics'
 import { EvolutionChart } from './Charts'
+import { athleteAge, formatBirthDate } from '../lib/athlete'
 
 type Props = {
   athlete: Athlete
@@ -56,7 +57,7 @@ export function AthleteFile({ athlete, category, sessions, evaluations, readOnly
           <span className="avatar large">{athlete.name.slice(0, 1).toUpperCase()}</span>
           <div>
             <h2 id="file-title" className="editor-title">{athlete.name}</h2>
-            <p className="report-meta">{athlete.number ? `Camisa ${athlete.number} · ` : ''}{athlete.positions || 'Posição não informada'} · {athlete.age ? `${athlete.age} anos · ` : ''}{athlete.height ? `${athlete.height} cm · ` : ''}{athlete.weight ? `${athlete.weight} kg · ` : ''}{athlete.dominantFoot === 'Ambidestro' ? 'ambidestro' : `perna dominante ${athlete.dominantFoot.toLowerCase()}`}</p>
+            <p className="report-meta">{athlete.number ? `Camisa ${athlete.number} · ` : ''}{athlete.positions || 'Posição não informada'} · {athleteAge(athlete) ? `${athleteAge(athlete)} anos${athlete.birthDate ? ` (nasc. ${formatBirthDate(athlete.birthDate)})` : ''} · ` : ''}{athlete.height ? `${athlete.height} cm · ` : ''}{athlete.weight ? `${athlete.weight} kg · ` : ''}{athlete.dominantFoot === 'Ambidestro' ? 'ambidestro' : `perna dominante ${athlete.dominantFoot.toLowerCase()}`}</p>
           </div>
           <div className="file-actions">
             {!readOnly && <button className="secondary-button" onClick={onNewEvaluation} type="button"><Plus size={15} /> Nova avaliação</button>}
