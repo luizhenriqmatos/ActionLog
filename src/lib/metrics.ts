@@ -107,7 +107,8 @@ function safe(value: unknown) {
 
 export type RateKey = 'shotAccuracy' | 'conversion' | 'passAccuracy' | 'dominantEfficiency' | 'nonDominantEfficiency' | 'rightEfficiency' | 'leftEfficiency'
 
-export type Rate = { key: RateKey; label: string; formula: string; numerator: number; denominator: number; value: number | null }
+/** `inconsistent`: o numerador passou do denominador (ex.: 2 no gol e 0 finalizações). A taxa não é calculada. */
+export type Rate = { key: RateKey; label: string; formula: string; numerator: number; denominator: number; value: number | null; inconsistent?: boolean }
 
 export const RATE_INFO: Record<RateKey, { label: string; formula: string }> = {
   shotAccuracy: { label: 'Aproveitamento de finalização', formula: 'No gol ÷ finalizações × 100' },
@@ -120,6 +121,8 @@ export const RATE_INFO: Record<RateKey, { label: string; formula: string }> = {
 }
 
 function rate(key: RateKey, numerator: number, denominator: number): Rate {
+  // registro incompleto (D-M): o sistema não inventa a finalização que faltou, então a taxa fica sem valor
+  if (numerator > denominator) return { key, ...RATE_INFO[key], numerator, denominator, value: null, inconsistent: true }
   return { key, ...RATE_INFO[key], numerator, denominator, value: pct(numerator, denominator) }
 }
 
