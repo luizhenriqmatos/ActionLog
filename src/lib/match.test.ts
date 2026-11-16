@@ -96,11 +96,23 @@ test('coletivo = soma dos atletas + escanteios; placar', () => {
   assert.equal(collective(events, 2).interceptions, 1)
 })
 
-test('sessão gerada: gol sem finalização vira aviso, não bloqueio', () => {
+test('sessão gerada (D-M): grava o registrado, não inventa finalização, e avisa', () => {
   const r = sessionTotals({ goals: 1, assists: 0, shots: 0, shotsOnTarget: 0, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0 })
-  assert.equal(r.adjusted, true)
-  assert.equal(r.totals.shotsOnTarget, 1)
-  assert.equal(r.totals.shots, 1)
+  assert.equal(r.adjusted, false)
+  assert.equal(r.totals.goals, 1)
+  assert.equal(r.totals.shotsOnTarget, 0)
+  assert.equal(r.totals.shots, 0)
+  assert.equal(r.warnings.length, 1)
+  const ok = sessionTotals({ goals: 1, assists: 0, shots: 3, shotsOnTarget: 2, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0 })
+  assert.deepEqual(ok.warnings, [])
+})
+
+test('taxa com registro incoerente fica sem valor, sem passar de 100%', async () => {
+  const { gameRates } = await import('./metrics.ts')
+  const rates = gameRates({ goals: 1, assists: 0, shots: 0, shotsOnTarget: 2, accuratePasses: 0, wrongPasses: 0, passTotal: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0 } as never)
+  const accuracy = rates.find((r) => r.key === 'shotAccuracy')!
+  assert.equal(accuracy.value, null)
+  assert.equal(accuracy.inconsistent, true)
 })
 
 test('posição → setor (lista nova e texto antigo)', async () => {

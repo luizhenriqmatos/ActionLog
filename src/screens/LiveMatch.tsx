@@ -8,8 +8,8 @@ import {
   type EventKind, type MatchEvent, type Period, type PlayerAction, type Sector, type TeamAction,
 } from '../lib/match'
 import {
-  QueueFullError, discardRejected, fetchMatchBundle, flushQueue, measureOffset, openMatch, pendingCount, pendingMatchOps, probeQueue, queueFull, queuedEvents, queuedUndos,
-  recordEvent, rejectedItems, removeFromLineup, retryRejected, saveLineup, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow, type RejectedView,
+  QueueFullError, SectorTakenError, claimSector, discardRejected, sectorOwnerFor, fetchMatchBundle, flushQueue, measureOffset, openMatch, pendingCount, pendingMatchOps, probeQueue, queueFull, queuedEvents, queuedUndos,
+  recordEvent, rejectedItems, removeFromLineup, retryRejected, saveLineup, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow, type RejectedView, type SectorOwner,
 } from '../lib/matchSync'
 import { REMEASURE_MS, applySample, type OffsetSample } from '../lib/clock'
 
@@ -26,6 +26,7 @@ type Props = {
 }
 
 type SectorFilter = Sector | 'ALL'
+const sectorLabel = (s: SectorFilter) => (s === 'ALL' ? 'Todos' : SECTORS.find((x) => x.id === s)?.label ?? s)
 type LineupChoice = 'starter' | 'reserve' | 'out'
 
 const POLL_MS = 5000
@@ -41,6 +42,11 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   const [error, setError] = useState('')
   const [online, setOnline] = useState(true)
   const [pending, setPending] = useState(0)
+  /** Donos de setor no servidor (D-L) e a sessão deste aparelho. */
+  const [owners, setOwners] = useState<SectorOwner[]>([])
+  const [mySessionId, setMySessionId] = useState<string | null>(null)
+  const ownersRef = useRef<SectorOwner[]>([])
+  const sectorRef = useRef<SectorFilter>('ALL')
   const [storageFull, setStorageFull] = useState(false)
   const [rejected, setRejected] = useState<RejectedView[]>([])
   const [clockJump, setClockJump] = useState(0)
@@ -59,6 +65,8 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   const [flash, setFlash] = useState('')
   const [toast, setToast] = useState('')
   const matchRef = useRef<MatchRow | null>(null)
+  const userIdRef = useRef(user.id)
+  userIdRef.current = user.id
   const eventRef = useRef(event)
   eventRef.current = event
   matchRef.current = match
@@ -78,6 +86,18 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
         setMatch(bundle.match)
         setPlayers(bundle.players)
       }
+      // alguém assumiu o setor que era deste aparelho: volta para Todos e avisa
+      const mine = sectorRef.current
+      const before = ownersRef.current.find((o) => o.scope === mine)
+      const now = bundle.owners.find((o) => o.scope === mine)
+      if (mine !== 'ALL' && before?.userId === userIdRef.current && now && now.userId !== userIdRef.current) {
+        setSector('ALL')
+        setToast(`${now.userName || 'Outro observador'} assumiu o setor ${sectorLabel(mine)}. Você está em Todos.`)
+      }
+      ownersRef.current = bundle.owners
+      setOwners(bundle.owners)
+      const me = bundle.owners.find((o) => o.userId === userIdRef.current)
+      if (me) setMySessionId(me.sessionId)
       setServerEvents(bundle.events)
       const serverIds = new Set(bundle.events.map((e) => e.id))
       // recusado pelo servidor não conta como registrado: sai da tela e aparece no aviso de recusados
@@ -139,6 +159,21 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
         matchRef.current = row
         if (row.status === 'finished') setView('summary')
         await refresh()
+        // retoma o setor que este aparelho cobria; se outro observador já está com ele, fica em Todos
+        if (alive && !readOnly && row.status !== 'finished') {
+          const wanted = sectorRef.current
+          try {
+            const claimed = await claimSector(row.id, wanted, user.name)
+            if (alive) setMySessionId(claimed.sessionId)
+          } catch (e) {
+            if (alive && e instanceof SectorTakenError) {
+              setSector('ALL')
+              setToast(`O setor ${sectorLabel(wanted)} está com ${e.holder}. Você está em Todos.`)
+              void claimSector(row.id, 'ALL', user.name).then((c) => alive && setMySessionId(c.sessionId)).catch(() => {})
+            }
+          }
+          await refresh()
+        }
         if (alive && row.status === 'preparing' && row.commanderUserId === user.id) {
           const bundle = await fetchMatchBundle(row.id).catch(() => null)
           if (alive && bundle && bundle.players.length === 0) setView('lineup')
@@ -163,7 +198,34 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     return () => { window.clearInterval(poll); window.clearInterval(flush); window.clearInterval(tick); window.clearInterval(clock); window.removeEventListener('online', back); window.removeEventListener('offline', off) }
   }, [refresh, remeasure])
 
-  useEffect(() => { try { localStorage.setItem(`actionlog_sector_${event.id}`, sector) } catch { /* ignora */ } }, [sector, event.id])
+  useEffect(() => { sectorRef.current = sector; try { localStorage.setItem(`actionlog_sector_${event.id}`, sector) } catch { /* ignora */ } }, [sector, event.id])
+
+  /**
+   * Trocar de setor = assumir o setor no servidor (D-L). Quem só lê usa o filtro livremente.
+   * Setor de outro observador: pergunta antes de tomar; os lances dele nesse setor passam a ser recusados.
+   */
+  async function chooseSector(next: SectorFilter) {
+    if (next === sector) return
+    if (readOnly || !match || match.status === 'finished') { setSector(next); return }
+    if (!online) { setToast('Sem conexão: não dá para trocar de setor agora.'); return }
+    try {
+      const claimed = await claimSector(match.id, next, user.name)
+      setMySessionId(claimed.sessionId)
+      setSector(next)
+    } catch (e) {
+      if (e instanceof SectorTakenError) {
+        if (!window.confirm(`O setor ${sectorLabel(next)} está com ${e.holder}. Assumir mesmo assim? Os lances de ${e.holder} nesse setor deixam de ser aceitos.`)) return
+        try {
+          const claimed = await claimSector(match.id, next, user.name, true)
+          setMySessionId(claimed.sessionId)
+          setSector(next)
+        } catch (err) { setToast(err instanceof Error ? err.message : 'Não foi possível trocar de setor.') }
+      } else setToast('Não foi possível trocar de setor agora. Tente de novo.')
+    }
+    void refresh()
+  }
+  /** Dono do setor deste atleta, se for outra pessoa. */
+  const lockedBy = (p: MatchPlayer) => (readOnly ? null : sectorOwnerFor(owners, p.sector, user.id))
   useEffect(() => { if (!toast) return; const t = window.setTimeout(() => setToast(''), 2600); return () => window.clearTimeout(t) }, [toast])
 
   /* ---------- derivados ---------- */
@@ -217,7 +279,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     if (!match) return null
     let created: MatchEvent | null = null
     // armazenamento cheio: o registro não entra (nem na tela) e os botões ficam bloqueados até a fila esvaziar
-    if (!safely(() => { created = recordEvent({ matchId: match.id, teamId, userId: user.id, userName: user.name, kind, athleteId, period: at.period, clockSeconds: at.clockSeconds, createdAt: serverIso() }) }) || !created) return null
+    if (!safely(() => { created = recordEvent({ matchId: match.id, teamId, userId: user.id, userName: user.name, kind, athleteId, period: at.period, clockSeconds: at.clockSeconds, createdAt: serverIso(), sessionId: mySessionId }) }) || !created) return null
     const event: MatchEvent = created
     setLocalEvents((list) => [...list, event])
     setPending(pendingCount())
@@ -501,8 +563,9 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
           <main className="live-col live-col-center">
             <div className="sector-chips" role="tablist" aria-label="Filtrar por setor">
               {[{ id: 'ALL' as const, label: 'Todos' }, ...SECTORS].map((s) => (
-                <button key={s.id} role="tab" aria-selected={sector === s.id} className={sector === s.id ? 'active' : ''} onClick={() => setSector(s.id)} type="button">
+                <button key={s.id} role="tab" aria-selected={sector === s.id} className={sector === s.id ? 'active' : ''} onClick={() => void chooseSector(s.id)} type="button">
                   {s.label}<b>{s.id === 'ALL' ? onField.length : onField.filter((p) => p.sector === s.id).length}</b>
+                  {s.id !== 'ALL' && (() => { const o = owners.find((x) => x.scope === s.id); return o ? <small className="sector-owner">{o.userId === user.id ? 'você' : o.userName || 'ocupado'}</small> : null })()}
                 </button>
               ))}
             </div>
@@ -516,7 +579,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
                 {groups.map(({ group, list }) => (
                   <section key={group} className="pos-group" aria-label={group}>
                     <h3 className="pos-title">{group}</h3>
-                    {list.map((p) => <PlayerCard key={p.athleteId} player={p} totals={totals.get(p.athleteId)} minutes={liveMinutes.get(p.athleteId) ?? 0} canRecord={canRecord} flash={flash} canUndo={(kind) => canUndo(p.athleteId, kind)} onPlus={(kind) => tap(kind, p.athleteId)} onMinus={(kind) => undoAction(p.athleteId, kind)} />)}
+                    {list.map((p) => <PlayerCard key={p.athleteId} player={p} totals={totals.get(p.athleteId)} minutes={liveMinutes.get(p.athleteId) ?? 0} canRecord={canRecord && !lockedBy(p)} lockedBy={lockedBy(p)?.userName} flash={flash} canUndo={(kind) => canUndo(p.athleteId, kind)} onPlus={(kind) => tap(kind, p.athleteId)} onMinus={(kind) => undoAction(p.athleteId, kind)} />)}
                   </section>
                 ))}
               </div>
@@ -656,7 +719,7 @@ function MatchSummary({ match, players, events, clubName, finished, onBack }: { 
     <section className="summary">
       <div className="lineup-head"><div><strong>{finished ? 'Resumo do jogo' : 'Resumo parcial'}</strong><small>{clubName || 'Nós'} {total.goalsFor} × {total.goalsAgainst} {match.opponent}</small></div><button className="secondary-button compact" onClick={onBack} type="button">{finished ? 'Fechar' : 'Voltar ao jogo'}</button></div>
       {finished && <p className="live-note ok"><Check size={14} /> O scout de cada atleta foi salvo e aparece em Desempenho, no histórico e no relatório para os pais.</p>}
-      {warnings.length > 0 && <div className="live-note warn"><AlertTriangle size={14} /><div><strong>Conferir (não bloqueia):</strong>{warnings.map((w) => <span key={w}>{w}</span>)}<small>Gol conta também como finalização no gol, e no gol como finalização.</small></div></div>}
+      {warnings.length > 0 && <div className="live-note warn"><AlertTriangle size={14} /><div><strong>Conferir o registro (não bloqueia):</strong>{warnings.map((w) => <span key={w}>{w}</span>)}<small>Os números foram salvos como registrados; o sistema não completa o que faltou. Se faltou marcar a finalização, corrija a sessão do atleta em Números. Enquanto isso, o aproveitamento dele neste jogo fica sem valor.</small></div></div>}
       <h4>Coletivo</h4>
       <div className="table-wrap"><table className="perf-table summary-table"><thead><tr><th>Ação</th><th>1ºT</th><th>2ºT</th><th>Total</th></tr></thead><tbody>
         {lines.map(([label, get]) => <tr key={label}><td>{label}</td><td>{get(first)}</td><td>{get(second)}</td><td><strong>{get(total)}</strong></td></tr>)}
@@ -672,19 +735,20 @@ function MatchSummary({ match, players, events, clubName, finished, onBack }: { 
 }
 
 /* ---------- cartão do atleta ---------- */
-function PlayerCard({ player, totals, minutes, canRecord, flash, canUndo, onPlus, onMinus }: {
-  player: MatchPlayer; totals: ReturnType<typeof playerTotals> extends Map<string, infer T> ? T | undefined : never; minutes: number; canRecord: boolean; flash: string
+function PlayerCard({ player, totals, minutes, canRecord, lockedBy, flash, canUndo, onPlus, onMinus }: {
+  player: MatchPlayer; totals: ReturnType<typeof playerTotals> extends Map<string, infer T> ? T | undefined : never; minutes: number; canRecord: boolean; lockedBy?: string; flash: string
   canUndo: (kind: PlayerAction) => boolean; onPlus: (kind: PlayerAction) => void; onMinus: (kind: PlayerAction) => void
 }) {
   const code = primaryPosition(player.positions)
   return (
-    <article className={`live-player ${player.onField ? '' : 'benched'}`}>
+    <article className={`live-player ${player.onField ? '' : 'benched'} ${lockedBy !== undefined ? 'locked' : ''}`}>
       <header>
         <span className="live-number">{player.number || '—'}</span>
         <strong>{player.athleteName}</strong>
         <small className="pos-code">{code ?? 'sem posição'}</small>
         <b className="live-min" title="Minutos jogados">{roundMinutes(minutes)}'</b>
       </header>
+      {lockedBy !== undefined && <p className="live-locked">Setor de {lockedBy || 'outro observador'}: só ele registra este atleta.</p>}
       <div className="act-grid">
         {PLAYER_ACTIONS.map((a) => {
           const value = totals ? totals[a.metric] : 0

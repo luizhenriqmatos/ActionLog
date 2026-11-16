@@ -232,3 +232,46 @@ test('desvio do relógio é reaprendido; salto grande é sinalizado; medição l
   assert.deepEqual(applySample(1200, { offset: 1200 + OFFSET_JUMP_MS + 1, rtt: 80, at: 0 }), { offset: 3201, accepted: true, jumped: true })
   assert.deepEqual(applySample(1200, { offset: 9000, rtt: MAX_RTT_MS + 1, at: 0 }), { offset: 1200, accepted: false, jumped: false })
 })
+
+/* ---------- v2: decisões D-K e data de nascimento ---------- */
+
+test('D-K: membro restrito não guarda no aparelho as categorias que não vê; sem restrição nada muda', async () => {
+  const { restrictToCategories, canSeeCategory } = await import('./sync.ts')
+  const data = appData([event('a', '2026-11-20')])
+  data.categories['Sub-16'] = { ...emptyCategory(), events: [event('b', '2026-11-21')] }
+  assert.equal(restrictToCategories(data, null), data)
+  const only16 = restrictToCategories(data, ['Sub-16'])
+  assert.equal(only16.categories['Sub-15'].events.length, 0)
+  assert.equal(only16.categories['Sub-16'].events.length, 1)
+  // o envio nunca trata ausência como exclusão: o que saiu do aparelho não vira linha apagada
+  assert.equal(only16.tombstones.length, 0)
+  assert.equal(canSeeCategory(['Sub-16'], 'Sub-15'), false)
+  assert.equal(canSeeCategory(null, 'Sub-15'), true)
+})
+
+test('data de nascimento: idade calculada, aniversário respeitado, data futura recusada', async () => {
+  const { ageFromBirthDate, athleteAge, formatBirthDate } = await import('./athlete.ts')
+  const day = new Date(2026, 10, 16) // 16/11/2026
+  assert.equal(ageFromBirthDate('2010-11-16', day), 16)
+  assert.equal(ageFromBirthDate('2010-11-17', day), 15)
+  assert.equal(ageFromBirthDate('2027-01-01', day), null)
+  assert.equal(athleteAge({ age: '14', birthDate: '2010-03-15' }, day), '16')
+  assert.equal(athleteAge({ age: '14' }, day), '14')
+  assert.equal(formatBirthDate('2010-03-15'), '15/03/2010')
+})
+
+test('data de nascimento sobe e desce na sincronização sem perder', async () => {
+  const { athleteRow, rowAthlete } = await import('./sync.ts')
+  const row = athleteRow(TEAM, 'Sub-16', { id: 'x', name: 'X', number: '', positions: '', age: '16', birthDate: '2010-03-15', height: '', weight: '', dominantFoot: 'Direita' })
+  assert.equal(row.birth_date, '2010-03-15')
+  assert.equal(rowAthlete(row).birthDate, '2010-03-15')
+  assert.equal(athleteRow(TEAM, 'Sub-16', { id: 'y', name: 'Y', number: '', positions: '', age: '', height: '', weight: '', dominantFoot: 'Direita' }).birth_date, null)
+})
+
+test('D-L: atleta de setor com dono só é registrado pelo dono; setor sem dono é livre', async () => {
+  const { sectorOwnerFor } = await import('./match.ts')
+  const owners = [{ sessionId: 's1', userId: 'ana', userName: 'Ana', scope: 'DEF' as const }, { sessionId: 's2', userId: 'bia', userName: 'Bia', scope: 'ALL' as const }]
+  assert.equal(sectorOwnerFor(owners, 'DEF', 'bia')?.userName, 'Ana')
+  assert.equal(sectorOwnerFor(owners, 'DEF', 'ana'), null)
+  assert.equal(sectorOwnerFor(owners, 'ATA', 'bia'), null)
+})

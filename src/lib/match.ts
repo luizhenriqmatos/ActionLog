@@ -308,20 +308,26 @@ export const roundMinutes = (seconds: number) => Math.round(seconds / 60)
 /* ---------- sessão gerada ao finalizar ---------- */
 
 /**
- * Totais do atleta prontos para scout_sessions. O banco exige no gol ≤ finalizações e gols ≤ no gol;
- * no jogo nada pode travar, então gol conta como finalização no gol e no gol conta como finalização
- * quando o observador não marcou as duas. Devolve `adjusted` para mostrar aviso.
+ * Totais do atleta prontos para scout_sessions (D-M): grava exatamente o que foi registrado.
+ * Antes, gol sem "no gol" virava "no gol" e "no gol" sem "finalização" virava finalização — números
+ * que ninguém marcou e que iam para a temporada e para o relatório da família. Agora a incoerência
+ * vira aviso na revisão pós-jogo, e quem registrou corrige se faltou marcar.
  */
 export function sessionTotals(raw: PlayerTotals): { totals: PlayerTotals; adjusted: boolean; warnings: string[] } {
   const totals = { ...raw }
   const warnings: string[] = []
-  if (totals.goals > totals.shotsOnTarget) {
-    warnings.push(`${totals.goals} gol(s) e só ${totals.shotsOnTarget} finalização(ões) no gol`)
-    totals.shotsOnTarget = totals.goals
-  }
-  if (totals.shotsOnTarget > totals.shots) {
-    warnings.push(`${totals.shotsOnTarget} no gol e só ${totals.shots} finalização(ões)`)
-    totals.shots = totals.shotsOnTarget
-  }
-  return { totals, adjusted: warnings.length > 0, warnings }
+  if (totals.goals > totals.shotsOnTarget) warnings.push(`${totals.goals} gol(s) e ${totals.shotsOnTarget} finalização(ões) no gol`)
+  if (totals.shotsOnTarget > totals.shots) warnings.push(`${totals.shotsOnTarget} no gol e ${totals.shots} finalização(ões)`)
+  return { totals, adjusted: false, warnings }
+}
+
+/* ---------- setor do observador (D-L) ---------- */
+
+/** Quem cobre cada setor neste jogo. Um setor tem no máximo um dono; ALL (Todos) não é dono de nada. */
+export type SectorOwner = { sessionId: string; userId: string; userName: string; scope: Sector | 'ALL' }
+
+/** Dono do setor deste atleta, se for outra pessoa (aí este usuário não registra). Setor sem dono: livre. */
+export function sectorOwnerFor(owners: SectorOwner[], sector: Sector, userId: string): SectorOwner | null {
+  const owner = owners.find((o) => o.scope === sector)
+  return owner && owner.userId !== userId ? owner : null
 }

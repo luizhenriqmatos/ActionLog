@@ -42,6 +42,8 @@ export type Athlete = {
   number: string
   positions: string
   age: string
+  /** Data de nascimento (AAAA-MM-DD). Opcional: atleta antigo pode não ter. */
+  birthDate?: string
   height: string
   weight: string
   dominantFoot: Foot

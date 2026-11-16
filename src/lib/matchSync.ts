@@ -6,7 +6,7 @@
  */
 import { supabase } from './supabase'
 import type { CalendarEvent, CategoryId, Foot } from '../types'
-import type { ClockState, EventKind, LineupPlayer, MatchEvent, Period, Phase, Sector } from './match'
+import type { ClockState, EventKind, LineupPlayer, MatchEvent, Period, Phase, Sector, SectorOwner } from './match'
 import type { OffsetSample } from './clock'
 import { createQueue, type QueueItem, type RejectedItem, type SendFailure } from './matchQueue'
 import { fetchAll } from './paging'
@@ -109,13 +109,16 @@ export async function fetchMatchBundle(matchId: string) {
     if (error) throw new Error(error.message)
     return { rows: (data ?? []) as Array<Record<string, unknown>>, total: count }
   })
-  const [m, p, e] = await Promise.all([
+  const [m, p, e, o] = await Promise.all([
     client.from('matches').select('*').eq('id', matchId).single(),
     page('match_players', ['athlete_id']),
     page('match_events', ['created_at', 'id']),
+    client.from('sessao_registro').select('id,user_id,user_name,escopo').eq('match_id', matchId).is('fim', null),
   ])
   if (m.error) throw new Error(m.error.message)
-  return { match: toMatch(m.data), players: p.map(toPlayer), events: e.map(toEvent) }
+  // donos de setor: se a tabela ainda não existir (banco antigo), segue sem eles
+  const owners = o.error ? [] : (o.data ?? []).map((r) => ({ sessionId: String(r.id), userId: String(r.user_id), userName: String(r.user_name ?? ''), scope: r.escopo as Sector | 'ALL' }))
+  return { match: toMatch(m.data), players: p.map(toPlayer), events: e.map(toEvent), owners }
 }
 
 /* ---------- fila ---------- */
@@ -214,11 +217,42 @@ export function newEventId() {
   })
 }
 
-export function recordEvent(input: { matchId: string; teamId: string; userId: string; userName: string; kind: EventKind; athleteId: string | null; period: Period; clockSeconds: number; createdAt: string }): MatchEvent {
+/* ---------- setor do observador (D-L) ---------- */
+
+export { sectorOwnerFor, type SectorOwner } from './match'
+
+export class SectorTakenError extends Error {
+  holder: string
+  constructor(holder: string) {
+    super(`Este setor já está com ${holder}.`)
+    this.name = 'SectorTakenError'
+    this.holder = holder
+  }
+}
+
+/**
+ * Assume um setor no servidor. Precisa de internet: é o servidor que garante um dono por setor.
+ * `force` tira o setor de quem está com ele (os lances dele nesse setor passam a ser recusados).
+ */
+export async function claimSector(matchId: string, scope: Sector | 'ALL', userName: string, force = false): Promise<SectorOwner> {
+  if (!supabase) throw new Error('offline')
+  const { data, error } = await supabase.rpc('assumir_setor', { p_match: matchId, p_escopo: scope, p_nome: userName, p_forcar: force })
+  if (error) {
+    const taken = /SETOR_OCUPADO:(.*)$/.exec(error.message)
+    if (taken) throw new SectorTakenError(taken[1].trim())
+    throw new Error(error.message)
+  }
+  const r = data as Record<string, unknown>
+  return { sessionId: String(r.id), userId: String(r.user_id), userName: String(r.user_name ?? ''), scope: r.escopo as Sector | 'ALL' }
+}
+
+
+export function recordEvent(input: { matchId: string; teamId: string; userId: string; userName: string; kind: EventKind; athleteId: string | null; period: Period; clockSeconds: number; createdAt: string; sessionId?: string | null }): MatchEvent {
   const row = {
     id: newEventId(), match_id: input.matchId, team_id: input.teamId, kind: input.kind, athlete_id: input.athleteId,
     period: input.period, clock_seconds: Math.max(0, Math.floor(input.clockSeconds)), created_by: input.userId,
     created_by_name: input.userName, created_at: input.createdAt,
+    ...(input.sessionId ? { sessao_registro_id: input.sessionId } : {}),
   }
   enqueue({ op: 'event', row })
   return toEvent({ ...row, deleted_at: null })
