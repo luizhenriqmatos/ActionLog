@@ -115,3 +115,35 @@ A exportação PDF normaliza os acentos apenas no stream técnico do arquivo par
 - Painel: ações coletivas, substituição em linha, tabela 1ºT/2ºT/Total, histórico de todos os aparelhos (Ocultar), rodapé com Desfazer meu último, Resumo, Copiar relatório, Finalizar partida. Tela ≥ 1024 px em 3 colunas (elenco · atletas + estatísticas · coletivo/substituição/histórico).
 - Cadastro: posição principal (lista de 12) + secundária opcional, gravadas em `positions`; edição de atleta existente; aviso de atletas sem posição. Setor da relação vem da posição (`sectorOf`).
 - Sem mudança de cores, fontes ou tokens; CSS novo só de layout.
+
+## v2 (ScoutHouse) — Fases 0, 1 e 2 · 16/11/2026
+
+Ordem de execução: `ScoutHouse v2 — execução` (documento do fundador). Onde ele e o código divergem, o código vence.
+
+### Backup
+- Cópia das 10 tabelas `public` no schema `backup_20261116` (mesmo projeto, fora da API, sem acesso para anon/authenticated). Contagens conferidas.
+- É proteção contra migration errada, não contra perda do projeto: o plano é Free, sem backup automático. Falta uma cópia fora do Supabase.
+
+### Fase 1 — parar a perda de dado (só front, em produção)
+- Calendário casa compromisso por `id` (`src/lib/calendar.ts`); o painel do dia lista todos os compromissos da data e avisa quando há mais de um.
+- Pull paginado com conferência de contagem (`src/lib/paging.ts`): truncamento vira erro. Vale também para relação e eventos do jogo.
+- Fila do jogo (`src/lib/matchQueue.ts`): armazenamento cheio bloqueia novos registros com aviso; recusa do servidor vai para a lista de recusados (chave `actionlog_match_rejected_v1`), com motivo, até reenviar ou descartar; falha passageira não vira recusa.
+- Relógio (`src/lib/clock.ts`): desvio remedido a cada minuto e a cada reconexão; salto acima de 2 s é sinalizado.
+- Testes: `src/lib/dataloss.test.ts` (18 casos). Total da suíte: 44.
+
+### Fase 2 — expand do banco (aplicada em produção; o app ainda não lê nada disto)
+Migrations `20261116180000` a `20261116185000`, cada uma com o desfazer em `supabase/rollback/`.
+- `categoria` por clube + `categoria_id` anulável nas 5 tabelas, preenchido por trigger a partir de `(team_id, category)`.
+- `tipo_evento` (catálogo, 18 tipos atuais). O CHECK de `kind` continua.
+- `tipo_partida`, `politica_contagem` e, em `matches`, `tipo_partida_codigo` + `politica_contagem_efetiva` (congelada na criação). Histórico = `oficial`.
+- LGPD: `responsavel`, `responsavel_atleta`, `texto_legal` (vazia), `consentimento` por finalidade, `consentimento_vigente`, `politica_retencao` (2 anos, anonimizar), `private.anonimizar_atleta` + `anonimizacao_log`, `athletes.anonimizado_em`.
+- `match_events`: `dispositivo_id`, `sessao_registro_id`, `ts_cliente`, `ts_servidor` (carimbado pelo servidor), `origem`, `status`, `grupo_duplicata_id`, `evento_pai_id`, `metadados`. Histórico = `legado`. Nenhuma recusa nova.
+- `contrato` (vazia).
+- Testes: `supabase/tests/v2_fase2.sql` — bloco que sempre termina em rollback; saída esperada `FASE2 OK (rollback): ...`.
+
+### Pendente de decisão do fundador
+- Três frases de LGPD (texto literal) para popular `texto_legal`.
+- Promessa "nenhum lance contado em dobro": ajustar o texto ou priorizar recusa por setor.
+- D-K (escopo por papel), D-L (recusa por setor), D-M (`sessionTotals`).
+- Data de nascimento do atleta: hoje só existe `age` em texto; sem a data não dá para calcular o fim do consentimento na maioridade.
+- Padrão de `amistoso` em `politica_contagem` (proposto: conta no atleta, aparece para a família, não conta campanha).
