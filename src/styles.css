@@ -719,3 +719,26 @@ button.live-clock{border:0;color:var(--ink);cursor:pointer}
 /* v4.3 hierarquia de superficies: sombra sutil nos cartoes para separar do fundo */
 :root{--card-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 14px 32px -22px rgba(0,0,0,.85)}
 .category-card,.form-card,.event-card,.calendar-card,.metric-card,.leg-card,.kpi-card,.total-card,.perf-card,.access-card,.club-card{box-shadow:var(--card-shadow)}
+
+/* v2 fase 1: avisos da fila do Jogo ao vivo (armazenamento cheio, recusados) e lista de compromissos do dia */
+.live-alert{display:flex;gap:10px;align-items:flex-start;border-radius:14px;padding:12px 14px;font-size:13px;border:1px solid var(--line)}
+.live-alert.error{background:var(--red-soft);border-color:var(--red-line);color:var(--red)}
+.live-alert.warn{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber)}
+.live-alert>div{min-width:0;flex:1}
+.live-alert strong{display:block;font-size:14px}
+.live-alert p{margin:4px 0 0;color:var(--ink-2)}
+.live-rejected{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.live-rejected li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 10px;color:var(--ink)}
+.live-rejected li span{display:flex;flex-direction:column;gap:2px;flex:1 1 180px;min-width:0}
+.live-rejected small{color:var(--muted);overflow-wrap:anywhere}
+.live-rejected .link-button{min-height:44px;padding:0 6px}
+.link-button.danger{color:var(--red)}
+.day-events{display:flex;flex-direction:column;gap:6px;padding-top:16px}
+.day-event-row{display:flex;align-items:center;gap:10px;min-height:44px;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;color:var(--ink)}
+.day-event-row.selected{border-color:var(--blue)}
+.day-event-row span{display:flex;flex-direction:column;min-width:0;flex:1}
+.day-event-row strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day-event-row small{font-size:11px;color:var(--muted)}
+.day-event-row.new{justify-content:center;border-style:dashed;color:var(--muted);font-size:13px;font-weight:600}
+.day-panel .notice{margin-top:14px}
+.calendar-more{font-size:10px;font-weight:700;color:var(--muted)}

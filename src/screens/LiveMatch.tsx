@@ -8,9 +8,10 @@ import {
   type EventKind, type MatchEvent, type Period, type PlayerAction, type Sector, type TeamAction,
 } from '../lib/match'
 import {
-  fetchMatchBundle, flushQueue, openMatch, pendingCount, pendingMatchOps, queuedEvents, queuedUndos, recordEvent, removeFromLineup,
-  saveLineup, serverOffset, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow,
+  QueueFullError, discardRejected, fetchMatchBundle, flushQueue, measureOffset, openMatch, pendingCount, pendingMatchOps, probeQueue, queueFull, queuedEvents, queuedUndos,
+  recordEvent, rejectedItems, removeFromLineup, retryRejected, saveLineup, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow, type RejectedView,
 } from '../lib/matchSync'
+import { REMEASURE_MS, applySample, type OffsetSample } from '../lib/clock'
 
 type Props = {
   teamId: string
@@ -40,6 +41,12 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   const [error, setError] = useState('')
   const [online, setOnline] = useState(true)
   const [pending, setPending] = useState(0)
+  const [storageFull, setStorageFull] = useState(false)
+  const [rejected, setRejected] = useState<RejectedView[]>([])
+  const [clockJump, setClockJump] = useState(0)
+  const offsetRef = useRef<number | null>(null)
+  /** Últimas medições do desvio do relógio, para diagnóstico. */
+  const offsetLog = useRef<OffsetSample[]>([])
   const pendingSince = useRef<number | null>(null)
   const [view, setView] = useState<'live' | 'lineup' | 'summary'>('live')
   const [sector, setSector] = useState<SectorFilter>(() => {
@@ -73,26 +80,60 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
       }
       setServerEvents(bundle.events)
       const serverIds = new Set(bundle.events.map((e) => e.id))
-      setLocalEvents((list) => [...list.filter((e) => !serverIds.has(e.id)), ...queuedEvents(current.id).filter((e) => !serverIds.has(e.id))].filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i))
+      // recusado pelo servidor não conta como registrado: sai da tela e aparece no aviso de recusados
+      const refused = new Set(rejectedItems(current.id).map((r) => r.eventId))
+      setLocalEvents((list) => [...list.filter((e) => !serverIds.has(e.id) && !refused.has(e.id)), ...queuedEvents(current.id).filter((e) => !serverIds.has(e.id))].filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i))
       setLocalUndos(queuedUndos())
     } catch {
       setOnline(false)
     }
-    setPending(pendingCount())
+    syncQueueState()
   }, [])
+
+  /** Reflete na tela o estado da fila: pendentes, recusados e armazenamento cheio. */
+  function syncQueueState() {
+    setPending(pendingCount())
+    if (queueFull()) probeQueue()
+    setStorageFull(queueFull())
+    const current = matchRef.current
+    setRejected(current ? rejectedItems(current.id) : [])
+  }
+
+  /** Remede o desvio do relógio contra o servidor. Falha de medição mantém o desvio anterior. */
+  const remeasure = useCallback(async () => {
+    const sample = await measureOffset()
+    if (!sample) return
+    const result = applySample(offsetRef.current, sample)
+    offsetLog.current = [...offsetLog.current.slice(-19), sample]
+    if (!result.accepted) return
+    if (result.jumped && offsetRef.current !== null) setClockJump(result.offset - offsetRef.current)
+    offsetRef.current = result.offset
+    setOffset(result.offset)
+  }, [])
+
+  /** Executa uma escrita na fila. Devolve false (e bloqueia a tela) se o armazenamento do aparelho estiver cheio. */
+  function safely(write: () => void): boolean {
+    try { write(); return true } catch (e) {
+      if (!(e instanceof QueueFullError)) throw e
+      setStorageFull(true)
+      setPending(pendingCount())
+      return false
+    }
+  }
 
   useEffect(() => {
     let alive = true
     ;(async () => {
       try {
-        const [diff, opened] = await Promise.all([serverOffset(), openMatch(teamId, category, eventRef.current)])
+        const [sample, opened] = await Promise.all([measureOffset(), openMatch(teamId, category, eventRef.current)])
         if (!alive) return
+        const diff = sample?.offset ?? 0
+        if (sample) { offsetRef.current = sample.offset; offsetLog.current = [sample] }
         setOffset(diff)
         let row = opened
         if (!row.commanderUserId && !readOnly) {
           const patch: MatchPatch = { commanderUserId: user.id, commanderName: user.name }
-          updateMatch(row.id, patch, new Date(Date.now() + diff).toISOString())
-          row = { ...row, ...patch }
+          if (safely(() => updateMatch(row.id, patch, new Date(Date.now() + diff).toISOString()))) row = { ...row, ...patch }
         }
         setMatch(row)
         matchRef.current = row
@@ -111,14 +152,16 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
 
   useEffect(() => {
     const poll = window.setInterval(() => void refresh(), POLL_MS)
-    const flush = window.setInterval(() => { void flushQueue().then(() => setPending(pendingCount())) }, 3000)
+    const flush = window.setInterval(() => { void flushQueue().then(() => syncQueueState()) }, 3000)
     const tick = window.setInterval(() => setNow(Date.now()), 250)
-    const back = () => { setOnline(true); void flushQueue().then(() => refresh()) }
+    // o relógio do celular deriva durante o jogo: remede o desvio a cada minuto e a cada reconexão
+    const clock = window.setInterval(() => void remeasure(), REMEASURE_MS)
+    const back = () => { setOnline(true); void remeasure(); void flushQueue().then(() => refresh()) }
     const off = () => setOnline(false)
     window.addEventListener('online', back)
     window.addEventListener('offline', off)
-    return () => { window.clearInterval(poll); window.clearInterval(flush); window.clearInterval(tick); window.removeEventListener('online', back); window.removeEventListener('offline', off) }
-  }, [refresh])
+    return () => { window.clearInterval(poll); window.clearInterval(flush); window.clearInterval(tick); window.clearInterval(clock); window.removeEventListener('online', back); window.removeEventListener('offline', off) }
+  }, [refresh, remeasure])
 
   useEffect(() => { try { localStorage.setItem(`actionlog_sector_${event.id}`, sector) } catch { /* ignora */ } }, [sector, event.id])
   useEffect(() => { if (!toast) return; const t = window.setTimeout(() => setToast(''), 2600); return () => window.clearTimeout(t) }, [toast])
@@ -141,7 +184,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   if (pending > 0 && pendingSince.current === null) pendingSince.current = now
   if (pending === 0) pendingSince.current = null
   const showPending = !online || (pending > 0 && pendingSince.current !== null && now - pendingSince.current > 4000)
-  const canRecord = Boolean(match) && !readOnly && match?.status !== 'finished'
+  const canRecord = Boolean(match) && !readOnly && match?.status !== 'finished' && !storageFull
   const history = useMemo(() => activeEvents(events).filter((e) => e.kind !== 'period_start').sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [events])
   const wholeSecond = Math.floor(seconds)
   const liveMinutes = useMemo(() => {
@@ -172,15 +215,18 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
 
   function record(kind: EventKind, athleteId: string | null, at = stamp()) {
     if (!match) return null
-    const created = recordEvent({ matchId: match.id, teamId, userId: user.id, userName: user.name, kind, athleteId, period: at.period, clockSeconds: at.clockSeconds, createdAt: serverIso() })
-    setLocalEvents((list) => [...list, created])
+    let created: MatchEvent | null = null
+    // armazenamento cheio: o registro não entra (nem na tela) e os botões ficam bloqueados até a fila esvaziar
+    if (!safely(() => { created = recordEvent({ matchId: match.id, teamId, userId: user.id, userName: user.name, kind, athleteId, period: at.period, clockSeconds: at.clockSeconds, createdAt: serverIso() }) }) || !created) return null
+    const event: MatchEvent = created
+    setLocalEvents((list) => [...list, event])
     setPending(pendingCount())
-    return created
+    return event
   }
 
   function tap(kind: PlayerAction | TeamAction, athleteId: string | null) {
     if (!canRecord) return
-    record(kind, athleteId)
+    if (!record(kind, athleteId)) return
     const key = `${athleteId ?? 'team'}:${kind}`
     setFlash(key)
     window.setTimeout(() => setFlash((f) => (f === key ? '' : f)), 260)
@@ -191,7 +237,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     const last = myEvents[myEvents.length - 1]
     if (!last) return
     const at = serverIso()
-    undoEvent(last.id, at)
+    if (!safely(() => undoEvent(last.id, at))) return
     setLocalUndos((m) => new Map(m).set(last.id, at))
     setToast(`Desfeito: ${actionLabel(last.kind)}${last.athleteId ? ` · ${nameOf(last.athleteId)}` : ''}`)
   }
@@ -200,7 +246,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     const last = lastMine(athleteId, kind)
     if (!last) return
     const at = serverIso()
-    undoEvent(last.id, at)
+    if (!safely(() => undoEvent(last.id, at))) return
     setLocalUndos((m) => new Map(m).set(last.id, at))
     try { navigator.vibrate?.(8) } catch { /* sem vibração */ }
   }
@@ -221,12 +267,13 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     }
   }
 
-  function patchMatch(patch: MatchPatch) {
-    if (!match) return
+  function patchMatch(patch: MatchPatch): boolean {
+    if (!match) return false
     const at = serverIso()
-    updateMatch(match.id, patch, at)
+    if (!safely(() => updateMatch(match.id, patch, at))) return false
     setMatch({ ...match, ...patch, updatedAt: at })
     setPending(pendingCount())
+    return true
   }
 
   const nameOf = (athleteId: string) => players.find((p) => p.athleteId === athleteId)?.athleteName ?? athletes.find((a) => a.id === athleteId)?.name ?? '—'
@@ -235,7 +282,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   function startPeriod(period: Period) {
     if (!match) return
     if (period === 1 && players.filter((p) => p.starter).length === 0) { setToast('Monte a relação com pelo menos 1 titular'); setView('lineup'); return }
-    record('period_start', null, { period, clockSeconds: 0 })
+    if (!record('period_start', null, { period, clockSeconds: 0 })) return
     patchMatch({ status: 'live', phase: period === 1 ? 'first' : 'second', period, clockRunning: true, clockStartedAt: serverIso(), clockBaseSeconds: 0 })
   }
   function pause() { patchMatch({ clockRunning: false, clockStartedAt: null, clockBaseSeconds: seconds }) }
@@ -244,7 +291,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     if (!match) return
     const period = match.period
     if (!window.confirm(`Encerrar o ${period === 1 ? '1º' : '2º'} tempo em ${formatClock(seconds)}?`)) return
-    record('period_end', null, { period, clockSeconds: seconds })
+    if (!record('period_end', null, { period, clockSeconds: seconds })) return
     patchMatch({ phase: period === 1 ? 'break' : 'done', clockRunning: false, clockStartedAt: null, clockBaseSeconds: seconds })
   }
   function adjustClock(total: number) {
@@ -268,11 +315,10 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   function substitute(outId: string, inId: string) {
     if (!match) return
     const at = stamp()
-    record('sub_out', outId, at)
-    record('sub_in', inId, at)
+    if (!record('sub_out', outId, at) || !record('sub_in', inId, at)) return
     const next = players.map((p) => (p.athleteId === outId ? { ...p, onField: false } : p.athleteId === inId ? { ...p, onField: true } : p))
     setPlayers(next)
-    saveLineup(match.id, teamId, next.filter((p) => p.athleteId === outId || p.athleteId === inId), serverIso())
+    safely(() => saveLineup(match.id, teamId, next.filter((p) => p.athleteId === outId || p.athleteId === inId), serverIso()))
     setToast(`${minuteLabel(at.period, at.clockSeconds)} · sai ${nameOf(outId)}, entra ${nameOf(inId)}`)
   }
 
@@ -293,8 +339,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     }
     if (!kept.some((p) => p.starter)) { setToast('Marque pelo menos 1 titular'); return }
     const removed = players.filter((p) => !kept.some((k) => k.athleteId === p.athleteId) && !(started && p.onField)).map((p) => p.athleteId)
-    saveLineup(match.id, teamId, kept, serverIso())
-    removeFromLineup(match.id, removed)
+    if (!safely(() => { saveLineup(match.id, teamId, kept, serverIso()); removeFromLineup(match.id, removed) })) return
     setPlayers(kept)
     setView('live')
     setToast(`Relação salva: ${kept.filter((p) => p.starter).length} titulares, ${kept.filter((p) => !p.starter).length} reservas`)
@@ -311,7 +356,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
         if (end) all = [...all, end]
       }
     }
-    patchMatch({ status: 'finished', phase: 'done', clockRunning: false, clockStartedAt: null, clockBaseSeconds: seconds, sessionsGeneratedAt: serverIso() })
+    if (!patchMatch({ status: 'finished', phase: 'done', clockRunning: false, clockStartedAt: null, clockBaseSeconds: seconds, sessionsGeneratedAt: serverIso() })) return
     await flushQueue()
     const fresh = await fetchMatchBundle(match.id).catch(() => null)
     if (fresh) {
@@ -394,6 +439,37 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
           {showPending && <span className="live-pending"><CloudOff size={13} /> {pending > 0 ? `${pending} aguardando envio` : 'sem conexão'}</span>}
         </div>
       </header>
+
+      {storageFull && (
+        <div className="live-alert error" role="alert">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Armazenamento deste aparelho cheio</strong>
+            <p>{pending} {pending === 1 ? 'registro aguarda' : 'registros aguardam'} envio. Novos registros estão bloqueados para não perder nenhum. Conecte à internet e espere a fila esvaziar.</p>
+          </div>
+        </div>
+      )}
+      {rejected.length > 0 && (
+        <div className="live-alert warn" role="alert">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>{rejected.length} {rejected.length === 1 ? 'registro recusado' : 'registros recusados'} pelo servidor</strong>
+            <p>Não entraram no jogo. Continuam guardados neste aparelho até você reenviar ou descartar.</p>
+            <ul className="live-rejected">
+              {rejected.map((r) => (
+                <li key={`${r.index}-${r.at}`}>
+                  <span><b>{r.event ? `${actionLabel(r.event.kind)}${r.event.athleteId ? ` · ${nameOf(r.event.athleteId)}` : ''} · ${minuteLabel(r.event.period, r.event.clockSeconds)}` : r.label}</b><small>Motivo: {r.reason}</small></span>
+                  <button className="link-button" onClick={() => { retryRejected(r.index); syncQueueState() }} type="button">Tentar de novo</button>
+                  <button className="link-button danger" onClick={() => { if (window.confirm('Descartar este registro de vez? Ele não entra no jogo.')) { discardRejected(r.index); syncQueueState() } }} type="button">Descartar</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+      {clockJump !== 0 && (
+        <p className="live-note"><AlertTriangle size={15} /> O relógio deste aparelho mudou {Math.abs(Math.round(clockJump / 1000))} s em relação ao servidor. Os horários seguem corrigidos pelo servidor. <button className="link-button" onClick={() => setClockJump(0)} type="button">Entendi</button></p>
+      )}
 
       {readOnly && <p className="live-note">Seu acesso é só de leitura: você acompanha, mas não registra ações.</p>}
 
