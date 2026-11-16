@@ -28,12 +28,19 @@ Os três celulares entram no **mesmo jogo**. Não importa quem abre primeiro.
 
 **Antes do jogo:** no Elenco, cada atleta precisa ter a **posição principal** escolhida na lista (toque em **Editar** no cartão). Atleta sem posição aparece num aviso amarelo.
 
-## 5. As duas regras para não contar em dobro
+## 5. As duas regras para não contar em dobro (o sistema garante)
 - **Cada atleta tem um dono só: o observador do setor dele.** Se o lateral sobe e finaliza, quem marca é o observador da **Defesa**.
-- **Escanteios e gol do adversário: só o comando registra.**
+  - Tocar em **Defesa**, **Meio** ou **Ataque** no topo da lista **assume o setor** (precisa de internet). Abaixo do nome do setor aparece quem está com ele.
+  - Setor com dono: os cartões desses atletas ficam apagados nos outros celulares e o servidor recusa lance de quem não é o dono.
+  - Se o setor já está com alguém, o app pergunta se você quer assumir. Assumindo, a outra pessoa volta para **Todos** e recebe um aviso.
+  - **Todos** não é dono de nada: serve para quem observa sozinho ou para o comando. Atleta de setor sem dono pode ser registrado por qualquer um.
+- **Escanteios, gol do adversário, períodos e substituições: só o comando registra.** O servidor recusa de quem não está no comando.
+- Lance recusado **não some**: aparece no aviso amarelo "registros recusados", com o motivo, até alguém tocar em **Tentar de novo** ou **Descartar**.
 
 ## 6. Se a internet cair
 Continue tocando normalmente. Aparece **"N aguardando envio"** no topo; quando a rede voltar, tudo é enviado sozinho e **nada é duplicado**. Não feche o app nem saia da conta até o aviso sumir.
 
 ## 7. No fim
 O comando toca em **Encerrar 2ºT** e depois em **Finalizar jogo**. Aparece o resumo (coletivo por tempo, cada atleta com minutos jogados e lance a lance). O scout de cada atleta vai sozinho para **Números**, para o histórico e para o relatório dos pais.
+
+Se aparecer **Conferir o registro**, é porque algum atleta ficou com gol sem "no gol" ou com "no gol" sem "finalização". O sistema **não completa** o que faltou: corrija a sessão do atleta em **Números** se faltou marcar. Até lá, o aproveitamento dele naquele jogo fica sem valor.
