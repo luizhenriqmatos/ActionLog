@@ -147,3 +147,11 @@ Migrations `20261116180000` a `20261116185000`, cada uma com o desfazer em `supa
 - D-K (escopo por papel), D-L (recusa por setor), D-M (`sessionTotals`).
 - Data de nascimento do atleta: hoje só existe `age` em texto; sem a data não dá para calcular o fim do consentimento na maioridade.
 - Padrão de `amistoso` em `politica_contagem` (proposto: conta no atleta, aparece para a família, não conta campanha).
+
+## v2 — decisões D-K, D-L, D-M e data de nascimento · 16/11/2026 (aprovadas pelo fundador)
+Migrations `20261116190000` a `20261116193000`, desfazer em `supabase/rollback/`, testes em `supabase/tests/v2_decisoes.sql` (saída `DECISOES OK (rollback)`).
+- **D-K escopo por categoria:** `team_members.categorias` e `team_invites.categorias` (NULL = todas; admin sempre todas; convite de leitura exige categorias). Policies de leitura/escrita passam por `private.can_see_category` / `can_write_category` / `can_see_match`. Front: só mostra categorias liberadas e limpa as outras do aparelho (`restrictToCategories`). Comissão técnica: escolher categorias no convite e alterar por membro.
+- **D-L setor no servidor:** `sessao_registro` (setor por observador, com início/fim, um dono por setor), `match_comando` (histórico do comando), RPC `assumir_setor`, trigger `match_events_escopo` recusa lance de atleta de setor com outro dono e coletivo/período/substituição de quem não comandava (folga de 30 s). Só origem `ao_vivo`.
+- **D-M contagem real:** CHECKs `game_on_target_le_shots` e `game_goals_le_on_target` removidos; `sessionTotals` não ajusta mais; taxa com numerador > denominador fica sem valor (`inconsistent`). 5 sessões históricas com finalização inventada corrigidas para a contagem dos eventos (valores antigos no backup).
+- **Data de nascimento:** `athletes.birth_date`, campo no cadastro, idade calculada; consentimento do responsável vence aos 18 anos; anonimização apaga a data.
+- Observação para D-M: em 5 de 6 casos o observador marcou "no gol" sem "finalização" — indica que a equipe entende "Finalização" como "para fora". Vale decidir se o botão vira "Final. fora" e o total passa a ser a soma.
