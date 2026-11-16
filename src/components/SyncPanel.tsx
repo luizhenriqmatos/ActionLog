@@ -3,6 +3,7 @@ import { Check, Cloud, CloudOff, Copy, KeyRound, LogOut, MessageCircle, RefreshC
 import type { SyncStatus, useSync } from '../hooks/useSync'
 import { errorText } from '../hooks/useSync'
 import type { Invite, Member, Role } from '../lib/sync'
+import { CATEGORIES, type CategoryId } from '../types'
 
 type SyncApi = ReturnType<typeof useSync>
 
@@ -21,6 +22,26 @@ const ROLE_HINT: Record<Role, string> = {
   treinador: 'registra e edita elenco, calendário e scout',
   analista: 'registra e edita elenco, calendário e scout',
   leitura: 'só consulta; o que mudar no aparelho não vai para o time',
+}
+
+const categoriesText = (list: CategoryId[] | null) => (!list ? 'todas as categorias' : list.join(', '))
+
+/** Marcar as categorias que a pessoa pode ver. Vazio não é permitido. */
+function CategoryChecks({ value, onChange, label }: { value: CategoryId[]; onChange: (next: CategoryId[]) => void; label: string }) {
+  return (
+    <fieldset className="category-checks">
+      <legend>{label}</legend>
+      {CATEGORIES.map((c) => {
+        const on = value.includes(c)
+        return (
+          <label key={c} className={on ? 'on' : ''}>
+            <input type="checkbox" checked={on} onChange={() => onChange(on ? value.filter((x) => x !== c) : CATEGORIES.filter((x) => x === c || value.includes(x)))} />
+            {c}
+          </label>
+        )
+      })}
+    </fieldset>
+  )
 }
 
 export function SyncPill({ sync, onOpen }: { sync: SyncApi; onOpen: () => void }) {
@@ -129,6 +150,8 @@ function SignedIn({ sync }: { sync: SyncApi }) {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
   const [inviteRole, setInviteRole] = useState<Role>('treinador')
+  const [inviteCategories, setInviteCategories] = useState<CategoryId[]>([...CATEGORIES])
+  const [editingScope, setEditingScope] = useState<{ userId: string; categories: CategoryId[] } | null>(null)
   const [justCreated, setJustCreated] = useState<Invite | null>(null)
   const [copied, setCopied] = useState('')
   const [code, setCode] = useState('')
@@ -148,7 +171,8 @@ function SignedIn({ sync }: { sync: SyncApi }) {
 
   async function makeInvite() {
     setBusy(true); setMessage(null)
-    try { const invite = await sync.team$.invite(inviteRole); setJustCreated(invite); await reload() }
+    if (inviteRole !== 'admin' && inviteCategories.length === 0) { setMessage({ tone: 'error', text: 'Escolha pelo menos uma categoria para o convidado.' }); setBusy(false); return }
+    try { const invite = await sync.team$.invite(inviteRole, inviteRole === 'admin' ? null : inviteCategories); setJustCreated(invite); await reload() }
     catch (err) { setMessage({ tone: 'error', text: errorText(err) }) }
     setBusy(false)
   }
@@ -179,7 +203,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
   return (
     <div className="sync-signed">
       <h2 id="sync-title" className="editor-title">{sync.team?.name || 'Seu time'}</h2>
-      <p className="report-meta">{sync.session?.user.email} · {sync.team ? ROLE_LABEL[sync.team.role] : '—'}</p>
+      <p className="report-meta">{sync.session?.user.email} · {sync.team ? ROLE_LABEL[sync.team.role] : '—'}{sync.team?.categories ? ` · ${categoriesText(sync.team.categories)}` : ''}</p>
       <div className="sync-facts">
         <div><span>Estado</span><strong>{sync.readOnly ? 'só leitura' : LABEL[sync.status]}</strong></div>
         <div><span>Última sincronização</span><strong>{last}</strong></div>
@@ -202,6 +226,21 @@ function SignedIn({ sync }: { sync: SyncApi }) {
                   </select>
                 ) : <span className="member-role">{ROLE_LABEL[m.role]}</span>}
                 {isAdmin && !self && <button className="icon-button danger" onClick={() => { if (window.confirm(`Remover ${m.email} do time?`)) void act(() => sync.team$.remove(m.userId)) }} type="button" aria-label={`Remover ${m.email}`}><Trash2 size={14} /></button>}
+                {m.role !== 'admin' && (
+                  <span className="member-scope">
+                    Vê: {categoriesText(m.categories)}
+                    {isAdmin && !self && editingScope?.userId !== m.userId && <button className="link-button" onClick={() => setEditingScope({ userId: m.userId, categories: m.categories ?? [...CATEGORIES] })} type="button">Alterar</button>}
+                  </span>
+                )}
+                {editingScope?.userId === m.userId && (
+                  <div className="member-scope-edit">
+                    <CategoryChecks label={`Categorias que ${m.email} vê`} value={editingScope.categories} onChange={(next) => setEditingScope({ userId: m.userId, categories: next })} />
+                    <div className="invite-row">
+                      <button className="primary-button" disabled={editingScope.categories.length === 0} onClick={() => { const next = editingScope.categories; setEditingScope(null); void act(() => sync.team$.setCategories(m.userId, next)) }} type="button">Salvar</button>
+                      <button className="secondary-button" onClick={() => setEditingScope(null)} type="button">Cancelar</button>
+                    </div>
+                  </div>
+                )}
               </li>
             )
           })}
@@ -217,7 +256,9 @@ function SignedIn({ sync }: { sync: SyncApi }) {
             </select>
             <button className="primary-button" disabled={busy} onClick={() => void makeInvite()} type="button">Gerar convite</button>
           </div>
-          <p className="perf-note">{ROLE_LABEL[inviteRole]}: {ROLE_HINT[inviteRole]}. Cada convite vale para 1 pessoa por 7 dias.</p>
+          {inviteRole !== 'admin' && <CategoryChecks label="Categorias que o convidado vê" value={inviteCategories} onChange={setInviteCategories} />}
+          {inviteRole !== 'admin' && inviteCategories.length === 0 && <div className="notice warn">Escolha pelo menos uma categoria.</div>}
+          <p className="perf-note">{ROLE_LABEL[inviteRole]}: {ROLE_HINT[inviteRole]}. {inviteRole === 'admin' ? 'Admin vê todas as categorias.' : 'Ele não vê atletas, jogos nem avaliações das outras categorias.'} Cada convite vale para 1 pessoa por 7 dias.</p>
           {justCreated && (
             <div className="invite-created">
               <span>Envie este link para a pessoa:</span>
@@ -233,7 +274,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
             <ul className="member-list invites">
               {invites.map((i) => (
                 <li key={i.id}>
-                  <span className="member-email"><b>{i.code}</b> · {ROLE_LABEL[i.role]} <small>até {new Date(i.expiresAt).toLocaleDateString('pt-BR')}</small></span>
+                  <span className="member-email"><b>{i.code}</b> · {ROLE_LABEL[i.role]}{i.role !== 'admin' && <small> · {categoriesText(i.categories)}</small>} <small>até {new Date(i.expiresAt).toLocaleDateString('pt-BR')}</small></span>
                   <button className="icon-button" onClick={() => void copy(link(i), i.id)} type="button" aria-label={`Copiar link do convite ${i.code}`}>{copied === i.id ? <Check size={14} /> : <Copy size={14} />}</button>
                   <button className="icon-button danger" onClick={() => void act(() => sync.team$.revoke(i.id))} type="button" aria-label={`Cancelar convite ${i.code}`}><Trash2 size={14} /></button>
                 </li>

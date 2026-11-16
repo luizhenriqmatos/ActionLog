@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { type AppData, emptyAppData } from '../types'
+import { type AppData, type CategoryId, emptyAppData } from '../types'
 import { supabase } from '../lib/supabase'
 import {
   type Club, type Invite, type Member, type Role, type TeamInfo,
-  acceptInvite, canCreateClub, createClub, createInvite, listInvites, listMembers, listMyClubs, mergeRemote, pullTeam, pushChanges,
+  acceptInvite, canCreateClub, restrictToCategories, setMemberCategories, createClub, createInvite, listInvites, listMembers, listMyClubs, mergeRemote, pullTeam, pushChanges,
   pushTeamName, removeMember, revokeInvite, setMemberRole,
 } from '../lib/sync'
 
@@ -117,7 +117,10 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
     try {
       setStatus('syncing')
       const remote = await pullTeam(supabase, target.id)
-      const { data: merged, fromServer } = mergeRemote(dataRef.current, remote, target.id)
+      const mergedRaw = mergeRemote(dataRef.current, remote, target.id)
+      const fromServer = mergedRaw.fromServer
+      // D-K: o que o membro não pode ver não fica no aparelho
+      const merged = restrictToCategories(mergedRaw.data, target.categories)
       const pushed = { ...(saved.current.pushed ?? {}) }
       fromServer.forEach((print, key) => { pushed[key] = print })
       if (remote.teamName && target.role !== 'admin') merged.teamName = remote.teamName
@@ -139,6 +142,14 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
     try {
       const [list, allowed] = await Promise.all([listMyClubs(supabase), canCreateClub(supabase)])
       setClubs(list)
+      // papel ou categorias mudaram enquanto o clube estava aberto: aplica já
+      setTeam((previous) => {
+        const fresh = previous && list.find((c) => c.id === previous.id)
+        if (!previous || !fresh || (fresh.role === previous.role && JSON.stringify(fresh.categories) === JSON.stringify(previous.categories))) return previous
+        const restricted = restrictToCategories(dataRef.current, fresh.categories)
+        if (restricted !== dataRef.current) { dataRef.current = restricted; setData(() => restricted) }
+        return { ...previous, role: fresh.role, categories: fresh.categories }
+      })
       setCanCreate(allowed)
       persist({ clubs: list })
       setClubsLoaded(true)
@@ -148,7 +159,7 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
       setClubsLoaded(true)
       return saved.current.clubs ?? []
     }
-  }, [])
+  }, [setData])
 
   /** Abre um clube. Se o aparelho tinha dados de outro clube, começa do zero e baixa os deste. */
   const enterClub = useCallback((id: string, list?: Club[]) => {
@@ -160,7 +171,10 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
       setData(() => dataRef.current)
     }
     persist({ teamId: id })
-    setTeam({ id: club.id, name: club.name, role: club.role })
+    // D-K: ao abrir o clube, some do aparelho qualquer categoria que este membro não pode ver
+    const restricted = restrictToCategories(dataRef.current, club.categories)
+    if (restricted !== dataRef.current) { dataRef.current = restricted; setData(() => restricted) }
+    setTeam({ id: club.id, name: club.name, role: club.role, categories: club.categories })
   }, [clubs, setData])
 
   // Ao entrar na conta: aceita convite pendente (e abre esse clube) e carrega a lista de clubes.
@@ -277,7 +291,8 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
   const team$ = {
     members: () => (supabase && team ? listMembers(supabase, team.id) : Promise.resolve([] as Member[])),
     invites: () => (supabase && team && team.role === 'admin' ? listInvites(supabase, team.id) : Promise.resolve([] as Invite[])),
-    invite: (role: Role) => createInvite(supabase!, team!.id, role),
+    invite: (role: Role, categories: CategoryId[] | null = null) => createInvite(supabase!, team!.id, role, categories),
+    setCategories: (userId: string, categories: CategoryId[] | null) => setMemberCategories(supabase!, team!.id, userId, categories),
     revoke: (id: string) => revokeInvite(supabase!, id),
     setRole: (userId: string, role: Role) => setMemberRole(supabase!, team!.id, userId, role),
     remove: (userId: string) => removeMember(supabase!, team!.id, userId),

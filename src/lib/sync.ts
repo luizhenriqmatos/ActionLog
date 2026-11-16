@@ -24,6 +24,7 @@ const time = (value: unknown) => {
 export function athleteRow(teamId: string, category: CategoryId, a: Athlete): Row {
   return {
     team_id: teamId, id: a.id, category, name: a.name, number: a.number, positions: a.positions, age: a.age,
+    birth_date: a.birthDate || null,
     height: a.height, weight: a.weight, dominant_foot: a.dominantFoot, updated_at: a.updatedAt ?? '1970-01-01T00:00:00.000Z', deleted_at: null,
   }
 }
@@ -67,7 +68,7 @@ const num = (value: unknown) => Math.max(0, Math.floor(Number(value) || 0))
 const foot = (value: unknown): Foot => (value === 'Esquerda' || value === 'Ambidestro' ? value : 'Direita')
 
 export function rowAthlete(r: Row): Athlete {
-  return { id: str(r.id), name: str(r.name), number: str(r.number), positions: str(r.positions), age: str(r.age), height: str(r.height), weight: str(r.weight), dominantFoot: foot(r.dominant_foot), updatedAt: new Date(time(r.updated_at)).toISOString() }
+  return { id: str(r.id), name: str(r.name), number: str(r.number), positions: str(r.positions), age: str(r.age), ...(r.birth_date ? { birthDate: str(r.birth_date).slice(0, 10) } : {}), height: str(r.height), weight: str(r.weight), dominantFoot: foot(r.dominant_foot), updatedAt: new Date(time(r.updated_at)).toISOString() }
 }
 
 export function rowEvent(r: Row): CalendarEvent {
@@ -173,16 +174,42 @@ export function mergeRemote(local: AppData, remote: RemoteRows, teamId: string):
 /* ---------- rede ---------- */
 
 export type Role = 'admin' | 'treinador' | 'analista' | 'leitura'
-export type TeamInfo = { id: string; name: string; role: Role }
-export type Member = { userId: string; email: string; role: Role; joinedAt: string }
-export type Invite = { id: string; code: string; role: Role; createdAt: string; expiresAt: string; usedAt: string | null }
+/** `categories` = categorias que o membro pode ver; null = todas (admin sempre null). */
+export type TeamInfo = { id: string; name: string; role: Role; categories: CategoryId[] | null }
+export type Member = { userId: string; email: string; role: Role; joinedAt: string; categories: CategoryId[] | null }
+export type Invite = { id: string; code: string; role: Role; createdAt: string; expiresAt: string; usedAt: string | null; categories: CategoryId[] | null }
+
+const toCategories = (value: unknown): CategoryId[] | null =>
+  Array.isArray(value) ? CATEGORIES.filter((c) => (value as unknown[]).includes(c)) : null
+
+/** O membro pode ver esta categoria? */
+export const canSeeCategory = (allowed: CategoryId[] | null | undefined, category: CategoryId) => !allowed || allowed.includes(category)
+
+/**
+ * Tira do aparelho o que o membro não pode ver (D-K). Esvazia as categorias proibidas.
+ * Não apaga nada no servidor: o envio só manda o que existe no aparelho e nunca trata ausência como exclusão.
+ */
+export function restrictToCategories(data: AppData, allowed: CategoryId[] | null): AppData {
+  if (!allowed) return data
+  const categories = { ...data.categories }
+  let changed = false
+  for (const category of CATEGORIES) {
+    if (allowed.includes(category)) continue
+    const c = categories[category]
+    if (c.athletes.length || c.events.length || c.sessions.length || (c.evaluations ?? []).length || Object.keys(c.stats).length) {
+      categories[category] = { ...c, athletes: [], events: [], sessions: [], evaluations: [], stats: {} }
+      changed = true
+    }
+  }
+  return changed ? { ...data, categories } : data
+}
 
 export type Club = TeamInfo & { athletes: number; sessions: number; evaluations: number }
 
 export async function listMyClubs(client: SupabaseClient): Promise<Club[]> {
   const { data, error } = await client.rpc('my_clubs')
   if (error) throw error
-  return ((data ?? []) as Array<{ team_id: string; name: string; role: Role; athletes: number; sessions: number; evaluations: number }>).map((t) => ({ id: t.team_id, name: t.name, role: t.role, athletes: Number(t.athletes), sessions: Number(t.sessions), evaluations: Number(t.evaluations) }))
+  return ((data ?? []) as Array<{ team_id: string; name: string; role: Role; athletes: number; sessions: number; evaluations: number; categorias?: unknown }>).map((t) => ({ id: t.team_id, name: t.name, role: t.role, categories: t.role === 'admin' ? null : toCategories(t.categorias), athletes: Number(t.athletes), sessions: Number(t.sessions), evaluations: Number(t.evaluations) }))
 }
 
 export async function canCreateClub(client: SupabaseClient): Promise<boolean> {
@@ -200,7 +227,7 @@ export async function createClub(client: SupabaseClient, name: string): Promise<
 export async function listMyTeams(client: SupabaseClient): Promise<TeamInfo[]> {
   const { data, error } = await client.rpc('my_teams')
   if (error) throw error
-  return ((data ?? []) as Array<{ team_id: string; name: string; role: Role }>).map((t) => ({ id: t.team_id, name: t.name, role: t.role }))
+  return ((data ?? []) as Array<{ team_id: string; name: string; role: Role }>).map((t) => ({ id: t.team_id, name: t.name, role: t.role, categories: null }))
 }
 
 /** Retorna o primeiro time do usuário ou cria um. O banco trava por usuário, então não duplica. */
@@ -216,8 +243,9 @@ export async function acceptInvite(client: SupabaseClient, code: string): Promis
   return data as string
 }
 
-export async function createInvite(client: SupabaseClient, teamId: string, role: Role): Promise<Invite> {
-  const { data, error } = await client.from('team_invites').insert({ team_id: teamId, role }).select('*').single()
+export async function createInvite(client: SupabaseClient, teamId: string, role: Role, categories: CategoryId[] | null = null): Promise<Invite> {
+  const categorias = role === 'admin' || !categories || categories.length === CATEGORIES.length ? null : categories
+  const { data, error } = await client.from('team_invites').insert({ team_id: teamId, role, categorias }).select('*').single()
   if (error) throw error
   return toInvite(data as Row)
 }
@@ -236,7 +264,15 @@ export async function revokeInvite(client: SupabaseClient, id: string) {
 export async function listMembers(client: SupabaseClient, teamId: string): Promise<Member[]> {
   const { data, error } = await client.rpc('list_team_members', { p_team: teamId })
   if (error) throw error
-  return ((data ?? []) as Array<{ user_id: string; email: string; role: Role; joined_at: string }>).map((m) => ({ userId: m.user_id, email: m.email, role: m.role, joinedAt: m.joined_at }))
+  return ((data ?? []) as Array<{ user_id: string; email: string; role: Role; joined_at: string; categorias?: unknown }>).map((m) => ({ userId: m.user_id, email: m.email, role: m.role, joinedAt: m.joined_at, categories: m.role === 'admin' ? null : toCategories(m.categorias) }))
+}
+
+/** Define as categorias que um membro vê. null ou todas marcadas = todas. */
+export async function setMemberCategories(client: SupabaseClient, teamId: string, userId: string, categories: CategoryId[] | null) {
+  const categorias = !categories || categories.length === CATEGORIES.length ? null : categories
+  if (categorias && categorias.length === 0) throw new Error('Escolha pelo menos uma categoria.')
+  const { error } = await client.from('team_members').update({ categorias }).eq('team_id', teamId).eq('user_id', userId)
+  if (error) throw error
 }
 
 export async function setMemberRole(client: SupabaseClient, teamId: string, userId: string, role: Role) {
@@ -250,7 +286,7 @@ export async function removeMember(client: SupabaseClient, teamId: string, userI
 }
 
 function toInvite(r: Row): Invite {
-  return { id: str(r.id), code: str(r.code), role: str(r.role) as Role, createdAt: str(r.created_at), expiresAt: str(r.expires_at), usedAt: r.used_at ? str(r.used_at) : null }
+  return { id: str(r.id), code: str(r.code), role: str(r.role) as Role, createdAt: str(r.created_at), expiresAt: str(r.expires_at), usedAt: r.used_at ? str(r.used_at) : null, categories: toCategories(r.categorias) }
 }
 
 /** Baixa uma tabela inteira do time, página a página, conferindo a contagem (ver paging.ts). */
