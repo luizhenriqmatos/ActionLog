@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AppData, Athlete, CalendarEvent, CategoryId, Evaluation, Foot, SessionRecord } from '../types'
-import { CATEGORIES } from '../types'
+import { CATEGORIES } from '../types/index.ts'
+import { fetchAll } from './paging.ts'
 
 /**
  * Sincronização local-first.
@@ -252,16 +253,25 @@ function toInvite(r: Row): Invite {
   return { id: str(r.id), code: str(r.code), role: str(r.role) as Role, createdAt: str(r.created_at), expiresAt: str(r.expires_at), usedAt: r.used_at ? str(r.used_at) : null }
 }
 
+/** Baixa uma tabela inteira do time, página a página, conferindo a contagem (ver paging.ts). */
+function pullTable(client: SupabaseClient, table: string, teamId: string): Promise<Row[]> {
+  return fetchAll<Row>(table, async (from, to) => {
+    const { data, count, error } = await client.from(table).select('*', { count: 'exact' }).eq('team_id', teamId).order('id', { ascending: true }).range(from, to)
+    if (error) throw error
+    return { rows: (data ?? []) as Row[], total: count }
+  })
+}
+
 export async function pullTeam(client: SupabaseClient, teamId: string): Promise<RemoteRows> {
   const [athletes, events, sessions, evaluations, team] = await Promise.all([
-    client.from('athletes').select('*').eq('team_id', teamId),
-    client.from('calendar_events').select('*').eq('team_id', teamId),
-    client.from('scout_sessions').select('*').eq('team_id', teamId),
-    client.from('athlete_evaluations').select('*').eq('team_id', teamId),
+    pullTable(client, 'athletes', teamId),
+    pullTable(client, 'calendar_events', teamId),
+    pullTable(client, 'scout_sessions', teamId),
+    pullTable(client, 'athlete_evaluations', teamId),
     client.from('teams').select('name').eq('id', teamId).maybeSingle(),
   ])
-  for (const result of [athletes, events, sessions, evaluations, team]) if (result.error) throw result.error
-  return { athletes: athletes.data ?? [], events: events.data ?? [], evaluations: evaluations.data ?? [], sessions: (sessions.data ?? []).map(({ passes_total: _ignored, ...rest }) => rest), teamName: (team.data as { name?: string } | null)?.name ?? null }
+  if (team.error) throw team.error
+  return { athletes, events, evaluations, sessions: sessions.map(({ passes_total: _ignored, ...rest }) => rest), teamName: (team.data as { name?: string } | null)?.name ?? null }
 }
 
 /** Envia o que mudou. Devolve as impressões atualizadas e quantos tombstones foram aplicados. */
