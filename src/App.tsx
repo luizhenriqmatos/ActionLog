@@ -58,6 +58,7 @@ import {
   legLabels,
 } from './types'
 import { finishingRates, formatPct, gameRates, sumFinishing, sumGame, validateFinishing, validateGame } from './lib/metrics'
+import { eventsByDate, singleEventByDate, upsertEvent } from './lib/calendar'
 import { downloadBlob } from './lib/download'
 import { PerformanceTab } from './screens/PerformanceTab'
 import { SessionEditor } from './components/SessionEditor'
@@ -280,7 +281,7 @@ function normalizeStored(raw: unknown): AppData {
     const athletes = Array.isArray(saved.athletes) ? saved.athletes.map(normalizeAthlete).filter((item): item is Athlete => Boolean(item)) : []
     const events = Array.isArray(saved.events) ? saved.events.map(normalizeEvent).filter((item): item is CalendarEvent => Boolean(item)) : []
     const footById = new Map(athletes.map((athlete) => [athlete.id, athlete.dominantFoot]))
-    const eventByDate = new Map(events.map((event) => [event.date, event]))
+    const eventByDate = singleEventByDate(events)
     const sessions = Array.isArray(saved.sessions) ? saved.sessions.map((session) => normalizeSession(session, category, footById, eventByDate)).filter((item): item is SessionRecord => Boolean(item)) : []
     const rawStats = saved.stats && typeof saved.stats === 'object' ? saved.stats as Record<string, unknown> : {}
     const stats: Record<string, Stats> = {}
@@ -308,7 +309,7 @@ function normalizeLegacy(raw: unknown): AppData {
   }
   if (Array.isArray(source.sessions)) {
     const footById = new Map(data.categories[category].athletes.map((athlete) => [athlete.id, athlete.dominantFoot]))
-    const eventByDate = new Map(data.categories[category].events.map((event) => [event.date, event]))
+    const eventByDate = singleEventByDate(data.categories[category].events)
     data.categories[category].sessions = source.sessions.map((session) => normalizeSession(session, category, footById, eventByDate)).filter((item): item is SessionRecord => Boolean(item))
   }
   return data
@@ -481,11 +482,8 @@ function App() {
 
   function saveCalendarDay(input: CalendarEvent) {
     const event = { ...input, updatedAt: new Date().toISOString() }
-    updateCategory((value) => {
-      const exists = value.events.some((item) => item.date === event.date)
-      const events = exists ? value.events.map((item) => item.date === event.date ? event : item) : [...value.events, event]
-      return { ...value, events: events.sort((a, b) => a.date.localeCompare(b.date)) }
-    })
+    // casa pelo id, nunca pela data: outro compromisso do mesmo dia não pode ser substituído
+    updateCategory((value) => ({ ...value, events: upsertEvent(value.events, event) }))
     setToast(`${event.mdTag || 'Data'} salvo no calendário`)
   }
 
@@ -689,8 +687,8 @@ function CalendarTab({ events, onSaveDay, onRemoveDay, onStartScout }: { events:
   const [view, setView] = useState<CalendarView>('month')
   const [cursor, setCursor] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(todayIso())
-  const eventByDate = useMemo(() => new Map(events.map((event) => [event.date, event])), [events])
-  const selectedEvent = selectedDate ? eventByDate.get(selectedDate) : undefined
+  const byDate = useMemo(() => eventsByDate(events), [events])
+  const selectedEvents = selectedDate ? byDate.get(selectedDate) ?? [] : []
   const monthDays = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const leading = (first.getDay() + 6) % 7
@@ -719,20 +717,24 @@ function CalendarTab({ events, onSaveDay, onRemoveDay, onStartScout }: { events:
     setSelectedDate(date)
   }
 
-  function saveDay(form: Omit<CalendarEvent, 'id'>) {
-    onSaveDay({ ...form, id: selectedEvent?.id ?? uid('calendar') })
-  }
-
-  return <section className="content-section calendar-section"><div className="section-heading"><div><div className="eyebrow">PERIODIZAÇÃO · MATCH DAY</div><h2>Semana com intenção.</h2><p>Classifique cada data como MD, MD-1, MD-2 e abra o Scout no contexto certo.</p></div><div className="calendar-legend"><span><i className="legend-dot md" /> MD · jogo</span><span><i className="legend-dot prep" /> preparação</span></div></div><div className="calendar-toolbar"><div className="calendar-nav"><button className="icon-button" onClick={() => moveCursor(-1)} type="button" aria-label="Período anterior"><ChevronLeft size={17} /></button><div className="calendar-pickers"><label className="sr-only" htmlFor="cal-month">Mês</label><select id="cal-month" className="chip-select" value={cursor.getMonth()} onChange={(event) => jumpTo(cursor.getFullYear(), Number(event.target.value))}>{MONTHS.map((name, index) => <option key={name} value={index}>{name}</option>)}</select><label className="sr-only" htmlFor="cal-year">Ano</label><select id="cal-year" className="chip-select" value={cursor.getFullYear()} onChange={(event) => jumpTo(Number(event.target.value), cursor.getMonth())}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select>{view === 'week' && <small className="calendar-week-label">{calendarTitle}</small>}</div><button className="icon-button" onClick={() => moveCursor(1)} type="button" aria-label="Próximo período"><ChevronRight size={17} /></button><button className="today-button" onClick={() => { setCursor(new Date()); setSelectedDate(todayIso()) }} type="button">Hoje</button></div><div className="view-switch"><button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')} type="button"><LayoutGrid size={15} /> Mês</button><button className={view === 'week' ? 'active' : ''} onClick={() => setView('week')} type="button"><CalendarDays size={15} /> Semana</button></div></div><div className={`calendar-workspace ${selectedDate ? 'has-selection' : ''}`}><div className="calendar-card"><div className="weekday-row">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div><div className={`calendar-grid ${view === 'week' ? 'week-grid' : ''}`}>{visibleDates.map((date, index) => date ? <CalendarCell key={date} date={date} event={eventByDate.get(date)} selected={selectedDate === date} onSelect={selectDate} /> : <div className="calendar-empty" key={`empty-${index}`} />)}</div></div>{selectedDate && <DayPanel date={selectedDate} event={selectedEvent} onSave={saveDay} onRemove={onRemoveDay} onStartScout={onStartScout} />}</div>{events.length > 0 && <div className="calendar-footnote"><Tag size={15} /><span>{events.length} datas classificadas · clique em qualquer data para editar a etiqueta de periodização e abrir a sessão.</span></div>}</section>
+  return <section className="content-section calendar-section"><div className="section-heading"><div><div className="eyebrow">PERIODIZAÇÃO · MATCH DAY</div><h2>Semana com intenção.</h2><p>Classifique cada data como MD, MD-1, MD-2 e abra o Scout no contexto certo.</p></div><div className="calendar-legend"><span><i className="legend-dot md" /> MD · jogo</span><span><i className="legend-dot prep" /> preparação</span></div></div><div className="calendar-toolbar"><div className="calendar-nav"><button className="icon-button" onClick={() => moveCursor(-1)} type="button" aria-label="Período anterior"><ChevronLeft size={17} /></button><div className="calendar-pickers"><label className="sr-only" htmlFor="cal-month">Mês</label><select id="cal-month" className="chip-select" value={cursor.getMonth()} onChange={(event) => jumpTo(cursor.getFullYear(), Number(event.target.value))}>{MONTHS.map((name, index) => <option key={name} value={index}>{name}</option>)}</select><label className="sr-only" htmlFor="cal-year">Ano</label><select id="cal-year" className="chip-select" value={cursor.getFullYear()} onChange={(event) => jumpTo(Number(event.target.value), cursor.getMonth())}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select>{view === 'week' && <small className="calendar-week-label">{calendarTitle}</small>}</div><button className="icon-button" onClick={() => moveCursor(1)} type="button" aria-label="Próximo período"><ChevronRight size={17} /></button><button className="today-button" onClick={() => { setCursor(new Date()); setSelectedDate(todayIso()) }} type="button">Hoje</button></div><div className="view-switch"><button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')} type="button"><LayoutGrid size={15} /> Mês</button><button className={view === 'week' ? 'active' : ''} onClick={() => setView('week')} type="button"><CalendarDays size={15} /> Semana</button></div></div><div className={`calendar-workspace ${selectedDate ? 'has-selection' : ''}`}><div className="calendar-card"><div className="weekday-row">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div><div className={`calendar-grid ${view === 'week' ? 'week-grid' : ''}`}>{visibleDates.map((date, index) => date ? <CalendarCell key={date} date={date} events={byDate.get(date) ?? []} selected={selectedDate === date} onSelect={selectDate} /> : <div className="calendar-empty" key={`empty-${index}`} />)}</div></div>{selectedDate && <DayPanel date={selectedDate} events={selectedEvents} onSave={onSaveDay} onRemove={onRemoveDay} onStartScout={onStartScout} />}</div>{events.length > 0 && <div className="calendar-footnote"><Tag size={15} /><span>{events.length} {events.length === 1 ? 'compromisso' : 'compromissos'} em {byDate.size} {byDate.size === 1 ? 'data' : 'datas'} · clique em qualquer data para editar a etiqueta de periodização e abrir a sessão.</span></div>}</section>
 }
 
-function CalendarCell({ date, event, selected, onSelect }: { date: string; event?: CalendarEvent; selected: boolean; onSelect: (date: string) => void }) {
+function CalendarCell({ date, events, selected, onSelect }: { date: string; events: CalendarEvent[]; selected: boolean; onSelect: (date: string) => void }) {
+  // com mais de um compromisso no dia, o jogo aparece primeiro e os demais viram "+N"
+  const event = events.find((item) => item.mdTag === 'MD') ?? events[0]
+  const more = events.length - 1
   const dayNumber = fromIsoDate(date).getDate()
   const isToday = date === todayIso()
-  return <button className={`calendar-cell ${selected ? 'selected' : ''} ${isToday ? 'today' : ''} ${event ? `has-event ${event.mdTag === 'MD' ? 'is-match' : 'is-prep'}` : ''}`} onClick={() => onSelect(date)} type="button"><span className="calendar-day-number">{dayNumber}</span>{event ? <span className={`calendar-event-pill ${event.mdTag === 'MD' ? 'match' : 'prep'}`}><b>{event.mdTag || '—'}</b><small>{event.title}</small></span> : <span className="calendar-empty-hint">classificar</span>}</button>
+  return <button className={`calendar-cell ${selected ? 'selected' : ''} ${isToday ? 'today' : ''} ${event ? `has-event ${event.mdTag === 'MD' ? 'is-match' : 'is-prep'}` : ''}`} onClick={() => onSelect(date)} type="button"><span className="calendar-day-number">{dayNumber}</span>{event ? <span className={`calendar-event-pill ${event.mdTag === 'MD' ? 'match' : 'prep'}`}><b>{event.mdTag || '—'}</b><small>{event.title}</small>{more > 0 && <i className="calendar-more" aria-label={`mais ${more} ${more === 1 ? 'compromisso' : 'compromissos'}`}>+{more}</i>}</span> : <span className="calendar-empty-hint">classificar</span>}</button>
 }
 
-function DayPanel({ date, event, onSave, onRemove, onStartScout }: { date: string; event?: CalendarEvent; onSave: (event: Omit<CalendarEvent, 'id'>) => void; onRemove: (id: string) => void; onStartScout: (event: CalendarEvent, mode: ScoutMode) => void }) {
+function DayPanel({ date, events, onSave, onRemove, onStartScout }: { date: string; events: CalendarEvent[]; onSave: (event: CalendarEvent) => void; onRemove: (id: string) => void; onStartScout: (event: CalendarEvent, mode: ScoutMode) => void }) {
+  // qual compromisso do dia está aberto no formulário; 'new' = cadastrando outro
+  const [selectedId, setSelectedId] = useState<string>(events[0]?.id ?? 'new')
+  useEffect(() => { setSelectedId(events[0]?.id ?? 'new') }, [date])
+  useEffect(() => { if (selectedId !== 'new' && !events.some((item) => item.id === selectedId)) setSelectedId(events[0]?.id ?? 'new') }, [events, selectedId])
+  const event = events.find((item) => item.id === selectedId)
   const [form, setForm] = useState({ type: event?.type ?? 'Treino' as EventType, title: event?.title ?? '', opponent: event?.opponent ?? '', location: event?.location ?? '', mdTag: event?.mdTag ?? '' })
   useEffect(() => {
     setForm({ type: event?.type ?? 'Treino', title: event?.title ?? '', opponent: event?.opponent ?? '', location: event?.location ?? '', mdTag: event?.mdTag ?? '' })
@@ -745,9 +747,11 @@ function DayPanel({ date, event, onSave, onRemove, onStartScout }: { date: strin
   function submit(eventSubmit: FormEvent) {
     eventSubmit.preventDefault()
     if (!form.title.trim() || !form.mdTag) return
-    onSave({ ...form, date, title: form.title.trim() })
+    const id = event?.id ?? uid('calendar')
+    onSave({ ...form, id, date, title: form.title.trim() })
+    setSelectedId(id)
   }
-  return <aside className="day-panel"><div className="day-panel-top"><div><div className="eyebrow">DATA SELECIONADA</div><h3>{dayLabel}</h3></div>{event && <span className={`md-badge ${event.mdTag === 'MD' ? 'match' : 'prep'}`}>{event.mdTag}</span>}</div><form className="day-form" onSubmit={submit}><label>Etiqueta de periodização<select required value={form.mdTag} onChange={(input) => setForm({ ...form, mdTag: input.target.value })}><option value="">Selecionar MD</option>{MD_OPTIONS.filter(Boolean).map((tag) => <option key={tag}>{tag}</option>)}</select></label><label>Tipo de sessão<select value={form.type} onChange={(input) => handleTypeChange(input.target.value as EventType)}><option>Treino</option><option>Jogo</option></select></label><label>Nome do compromisso<input required value={form.title} onChange={(input) => setForm({ ...form, title: input.target.value })} placeholder="Ex.: Organização ofensiva" /></label><label>{form.type === 'Jogo' ? 'Adversário' : 'Foco do treino'}<input value={form.opponent} onChange={(input) => setForm({ ...form, opponent: input.target.value })} placeholder={form.type === 'Jogo' ? 'Nome do adversário' : 'Ex.: Finalização sob pressão'} /></label><label>Local<input value={form.location} onChange={(input) => setForm({ ...form, location: input.target.value })} placeholder="Campo / CT" /></label><button className="primary-button full-button" type="submit">{event ? 'Atualizar data' : 'Classificar data'} <Check size={16} /></button></form>{event && <><div className="quick-scout"><div><div className="eyebrow">ABERTURA RÁPIDA</div><strong>Iniciar sessão em {event.mdTag}</strong><small>O relatório carregará automaticamente a etiqueta {event.mdTag} e a data {formatDayMonth(event.date)}.</small></div><button className="quick-button game" onClick={() => onStartScout(event, 'game')} type="button"><Swords size={16} /> {event.type === 'Jogo' ? 'Abrir Jogo ao vivo' : 'Iniciar Scout de Jogo'}</button><button className="quick-button finishing" onClick={() => onStartScout(event, 'finishing')} type="button"><Target size={16} /> Iniciar Scout de Treino de Finalização</button></div><button className="delete-day" onClick={() => onRemove(event.id)} type="button"><Trash2 size={14} /> Remover esta data</button></>}</aside>
+  return <aside className="day-panel"><div className="day-panel-top"><div><div className="eyebrow">DATA SELECIONADA</div><h3>{dayLabel}</h3></div>{event && <span className={`md-badge ${event.mdTag === 'MD' ? 'match' : 'prep'}`}>{event.mdTag}</span>}</div>{events.length > 1 && <div className="notice warn" role="status">Há {events.length} compromissos nesta data. Confira se não é o mesmo cadastrado duas vezes.</div>}{events.length > 0 && <div className="day-events" role="group" aria-label="Compromissos desta data">{events.map((item) => <button key={item.id} className={`day-event-row ${item.id === selectedId ? 'selected' : ''}`} aria-pressed={item.id === selectedId} onClick={() => setSelectedId(item.id)} type="button"><b className={`md-badge ${item.mdTag === 'MD' ? 'match' : 'prep'}`}>{item.mdTag || '—'}</b><span><strong>{item.title}</strong><small>{item.type}{item.opponent ? ` · ${item.opponent}` : ''}</small></span></button>)}<button className={`day-event-row new ${selectedId === 'new' ? 'selected' : ''}`} aria-pressed={selectedId === 'new'} onClick={() => setSelectedId('new')} type="button"><Plus size={15} /> Novo compromisso nesta data</button></div>}<form className="day-form" onSubmit={submit}><label>Etiqueta de periodização<select required value={form.mdTag} onChange={(input) => setForm({ ...form, mdTag: input.target.value })}><option value="">Selecionar MD</option>{MD_OPTIONS.filter(Boolean).map((tag) => <option key={tag}>{tag}</option>)}</select></label><label>Tipo de sessão<select value={form.type} onChange={(input) => handleTypeChange(input.target.value as EventType)}><option>Treino</option><option>Jogo</option></select></label><label>Nome do compromisso<input required value={form.title} onChange={(input) => setForm({ ...form, title: input.target.value })} placeholder="Ex.: Organização ofensiva" /></label><label>{form.type === 'Jogo' ? 'Adversário' : 'Foco do treino'}<input value={form.opponent} onChange={(input) => setForm({ ...form, opponent: input.target.value })} placeholder={form.type === 'Jogo' ? 'Nome do adversário' : 'Ex.: Finalização sob pressão'} /></label><label>Local<input value={form.location} onChange={(input) => setForm({ ...form, location: input.target.value })} placeholder="Campo / CT" /></label><button className="primary-button full-button" type="submit">{event ? 'Atualizar compromisso' : events.length > 0 ? 'Adicionar compromisso' : 'Classificar data'} <Check size={16} /></button></form>{event && <><div className="quick-scout"><div><div className="eyebrow">ABERTURA RÁPIDA</div><strong>Iniciar sessão em {event.mdTag}</strong><small>O relatório carregará automaticamente a etiqueta {event.mdTag} e a data {formatDayMonth(event.date)}.</small></div><button className="quick-button game" onClick={() => onStartScout(event, 'game')} type="button"><Swords size={16} /> {event.type === 'Jogo' ? 'Abrir Jogo ao vivo' : 'Iniciar Scout de Jogo'}</button><button className="quick-button finishing" onClick={() => onStartScout(event, 'finishing')} type="button"><Target size={16} /> Iniciar Scout de Treino de Finalização</button></div><button className="delete-day" onClick={() => onRemove(event.id)} type="button"><Trash2 size={14} /> Remover este compromisso</button></>}</aside>
 }
 
 function ScoutTab({ mode, setMode, scoutDay, onClearContext, onOpenCalendar, athletes, activeAthlete, stats, onActive, onIncrement, onReset, onFinish }: { mode: ScoutMode; setMode: (mode: ScoutMode) => void; scoutDay: CalendarEvent | null; onClearContext: () => void; onOpenCalendar: () => void; athletes: Athlete[]; activeAthlete?: Athlete; stats: Stats; onActive: (id: string) => void; onIncrement: (metric: GameMetric | FinishingMetric, amount?: number) => void; onReset: () => void; onFinish: () => void }) {
