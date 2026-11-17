@@ -1,0 +1,3 @@
+-- Aplicada via Supabase como v2_relatorio_emissao_fase_5_1 (SQL completo no registro de migrações).
+-- Tabela relatorio_emissao (log: atleta, responsável, canal, hash, conteúdo congelado só quando há link, token só em hash, validade 30 dias, revogação, acessos);
+-- funções public.emitir_relatorio / revogar_relatorio (authenticated) e relatorio_publico (anon, só com o código de 48 caracteres).

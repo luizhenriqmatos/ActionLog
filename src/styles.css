@@ -823,3 +823,10 @@ button.live-clock{border:0;color:var(--ink);cursor:pointer}
   .lineup-actions{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom));background:var(--bg,#131316);padding:8px;border-radius:20px;border:1px solid var(--line);z-index:5}
 }
 .board,.board *{-webkit-user-select:none;user-select:none}
+
+/* página pública do relatório: sempre clara, também na impressão */
+.public-report{min-height:100vh;background:#f5f5f7;color:#1d1d1f;padding:24px 12px;display:flex;flex-direction:column;align-items:center;gap:12px;font-family:Inter,system-ui,sans-serif}
+.public-report .report-sheet{width:min(820px,100%);box-shadow:0 2px 16px rgba(0,0,0,.08)}
+.public-note{font-size:12px;color:#6e6e73}.public-note button{background:none;border:0;color:#0a5bd6;text-decoration:underline;cursor:pointer;font:inherit}
+@media print{.public-report{background:#fff;padding:0}.public-report .report-sheet{box-shadow:none}.no-print{display:none!important}}
+.parent-emissions{font-size:12px;color:#a1a1a6;display:grid;gap:4px}.parent-warn{background:#3a2a10;border:1px solid #8a6a1f;color:#ffd98a;border-radius:12px;padding:8px 12px;font-size:13px}.parent-link{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}.parent-link input{flex:1;min-width:200px;background:#000;border:1px solid #333336;color:#f5f5f7;border-radius:10px;padding:8px 10px}

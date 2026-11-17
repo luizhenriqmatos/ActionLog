@@ -1,14 +1,20 @@
-import { useMemo, useState } from 'react'
-import { Check, Copy, MessageCircle, Printer, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Check, Copy, Link2, MessageCircle, Printer, X } from 'lucide-react'
 import type { Athlete, Evaluation, SessionRecord } from '../types'
-import { CRITERIA, GROUPS, SCORE_LABEL, TREND_LABEL, forAthlete, formatScore, groupAverage, overall, previousOf, trend } from '../lib/evaluations'
-import { addDaysIso, finishingRates, formatPct, gameRates, sumFinishing, sumGame } from '../lib/metrics'
+import { formatScore, forAthlete, overall, previousOf } from '../lib/evaluations'
+import { addDaysIso } from '../lib/metrics'
+import { buildReportContent, otherAthletesMentioned, reportPlainText } from '../lib/report'
+import { emitReport, fetchEmissions, fetchHiddenMatchIds, fetchResponsaveis, revokeReport, type EmissionRow, type Responsavel } from '../lib/reportSync'
+import { ReportSheet } from './ReportSheet'
 
 type Props = {
   athlete: Athlete
+  roster: Athlete[]
   category: string
   clubName: string
   coachName: string
+  teamId: string | null
+  readOnly?: boolean
   sessions: SessionRecord[]
   evaluations: Evaluation[]
   today: string
@@ -16,16 +22,12 @@ type Props = {
 }
 
 type PeriodKey = 'since-eval' | '30' | '90' | 'all'
-
-const stars = (value: number | null) => {
-  if (value == null) return '—'
-  const full = Math.round(value)
-  return '★'.repeat(full) + '☆'.repeat(5 - full)
-}
+type Channel = 'texto' | 'whatsapp' | 'impressao' | 'link'
 const br = (iso: string) => iso.split('-').reverse().join('/')
+const CANAL_LABEL: Record<string, string> = { texto: 'Texto copiado', whatsapp: 'WhatsApp', impressao: 'Impressão / PDF', link: 'Link', pdf: 'PDF', imagem: 'Imagem' }
 
-/** Relatório para os responsáveis: linguagem simples, pronto para imprimir, salvar em PDF ou mandar no WhatsApp. */
-export function ParentReport({ athlete, category, clubName, coachName, sessions, evaluations, today, onClose }: Props) {
+/** Relatório para os responsáveis. Toda entrega (texto, WhatsApp, PDF, link) é registrada no log de emissão antes de sair. */
+export function ParentReport({ athlete, roster, category, clubName, coachName, teamId, readOnly, sessions, evaluations, today, onClose }: Props) {
   const evals = forAthlete(evaluations, athlete.id)
   const [evalId, setEvalId] = useState(evals[evals.length - 1]?.id ?? '')
   const evaluation = evals.find((e) => e.id === evalId) ?? null
@@ -33,6 +35,20 @@ export function ParentReport({ athlete, category, clubName, coachName, sessions,
   const [periodKey, setPeriodKey] = useState<PeriodKey>(previous ? 'since-eval' : '90')
   const [message, setMessage] = useState(evaluation?.coachNote ?? '')
   const [copied, setCopied] = useState(false)
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
+  const [responsaveis, setResponsaveis] = useState<Responsavel[]>([])
+  const [responsavelId, setResponsavelId] = useState('')
+  const [history, setHistory] = useState<EmissionRow[]>([])
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [link, setLink] = useState<{ url: string; id: string; expira: string } | null>(null)
+
+  useEffect(() => {
+    if (!teamId) return
+    void fetchHiddenMatchIds(teamId).then(setHidden)
+    void fetchResponsaveis(teamId, athlete.id).then((list) => { setResponsaveis(list); if (list.length === 1) setResponsavelId(list[0].id) })
+    void fetchEmissions(teamId, athlete.id).then(setHistory)
+  }, [teamId, athlete.id])
 
   const range = useMemo(() => {
     if (periodKey === 'since-eval' && previous) return { from: addDaysIso(previous.date, 1), to: evaluation?.date ?? today }
@@ -40,58 +56,50 @@ export function ParentReport({ athlete, category, clubName, coachName, sessions,
     if (periodKey === 'all') return { from: '0000-01-01', to: '9999-12-31' }
     return { from: addDaysIso(today, -89), to: today }
   }, [periodKey, previous?.date, evaluation?.date, today])
-
-  const mine = sessions.filter((s) => s.athleteId === athlete.id && s.calendarDate >= range.from && s.calendarDate <= range.to)
-  const g = sumGame(mine.filter((s) => s.mode === 'game'))
-  const f = sumFinishing(mine.filter((s) => s.mode === 'finishing'))
-  const [, , passRate] = gameRates(g)
-  const fr = finishingRates(f, athlete.dominantFoot === 'Ambidestro')
-  const ambi = athlete.dominantFoot === 'Ambidestro'
   const periodText = range.from === '0000-01-01' ? 'Todo o histórico' : `${br(range.from)} a ${br(range.to)}`
+  const inRange = sessions.filter((s) => s.calendarDate >= range.from && s.calendarDate <= range.to)
 
-  const onField: string[] = []
-  if (g.sessions > 0) {
-    onField.push(`Participou de ${g.sessions} jogo${g.sessions > 1 ? 's' : ''} acompanhado${g.sessions > 1 ? 's' : ''} pela comissão: ${g.goals} gol${g.goals === 1 ? '' : 's'} e ${g.assists} assistência${g.assists === 1 ? '' : 's'}.`)
-    if (g.passTotal > 0) onField.push(`Acertou ${formatPct(passRate.value)} dos passes (${g.accuratePasses} de ${g.passTotal}).`)
-    if (g.tackles > 0) onField.push(`Recuperou a bola ${g.tackles} vez${g.tackles > 1 ? 'es' : ''} com desarmes.`)
+  const content = useMemo(() => buildReportContent({ athlete, category, clubName, coachName, evaluation, previous, sessions: inRange, hiddenMatchIds: hidden, periodText, today, message }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [athlete, category, clubName, coachName, evaluation, previous, sessions, hidden, periodKey, today, message])
+
+  const mentioned = useMemo(() => otherAthletesMentioned([message, evaluation?.strengths ?? '', evaluation?.improvements ?? '', evaluation?.goals ?? ''], athlete, roster), [message, evaluation, athlete, roster])
+  const canEmit = Boolean(teamId) && !readOnly
+
+  /** Registra a entrega ANTES de sair. Sem conexão não há como provar a quem foi entregue, então não entrega. */
+  async function emit(canal: Channel, withLink = false) {
+    if (!teamId) throw new Error('Entre na conta do clube para emitir relatórios.')
+    const emission = await emitReport({ teamId, athleteId: athlete.id, responsavelId: responsavelId || null, canal: canal === 'link' ? 'texto' : canal, content, withLink })
+    if (emission.aviso) setNotice(emission.aviso)
+    void fetchEmissions(teamId, athlete.id).then(setHistory)
+    return emission
   }
-  if (f.sessions > 0 && f.shots > 0) {
-    onField.push(`Nos treinos de finalização, fez ${f.goals} gol${f.goals === 1 ? '' : 's'} em ${f.shots} chutes (${formatPct(fr[1].value)} de aproveitamento).`)
-    if (!ambi && f.dominant.shots > 0 && f.nonDominant.shots > 0) onField.push(`Com a perna dominante converteu ${formatPct(fr[2].value)}; com a outra perna, ${formatPct(fr[3].value)}.`)
-    if (ambi && f.right.shots > 0 && f.left.shots > 0) onField.push(`Com a perna direita converteu ${formatPct(fr[2].value)}; com a esquerda, ${formatPct(fr[3].value)}.`)
+  async function run(action: () => Promise<void>) {
+    setBusy(true); setNotice('')
+    try { await action() } catch (error) { setNotice(error instanceof Error ? error.message : 'Não foi possível registrar a entrega.') } finally { setBusy(false) }
   }
-
-  const groupRows = evaluation ? GROUPS.map((gr) => {
-    const now = groupAverage(evaluation, gr)
-    const before = previous ? groupAverage(previous, gr) : null
-    return { group: gr, now, before, t: trend(now, before) }
-  }).filter((r) => r.now != null) : []
-
-  function plainText() {
-    const lines = [`*${clubName || 'ActionLog'} · Relatório de desenvolvimento*`, `Atleta: ${athlete.name} (${category})`, `Período: ${evaluation?.period || periodText}`]
-    if (coachName) lines.push(`Treinador: ${coachName}`)
-    if (evaluation) {
-      lines.push('', '*Avaliação do treinador*')
-      groupRows.forEach((r) => lines.push(`${r.group}: ${stars(r.now)} ${formatScore(r.now)}${r.t ? ` (${TREND_LABEL[r.t]})` : ''}`))
-      if (evaluation.strengths) lines.push('', `*Pontos fortes:* ${evaluation.strengths}`)
-      if (evaluation.improvements) lines.push(`*Estamos trabalhando:* ${evaluation.improvements}`)
-      if (evaluation.goals) lines.push(`*Metas:* ${evaluation.goals}`)
-    }
-    if (onField.length) lines.push('', '*Em campo*', ...onField)
-    if (message.trim()) lines.push('', `*Mensagem do treinador:* ${message.trim()}`)
-    return lines.join('\n')
+  const makeLink = async () => {
+    const e = await emit('link', true)
+    if (!e.token) throw new Error('O servidor não devolveu o link.')
+    const next = { url: `${window.location.origin}/?r=${e.token}`, id: e.id, expira: e.expiraEm ?? '' }
+    setLink(next)
+    return next
   }
-
-  async function copy() {
-    try { await navigator.clipboard.writeText(plainText().replace(/\*/g, '')); setCopied(true); window.setTimeout(() => setCopied(false), 2000) } catch { /* ignora */ }
-  }
-
-  function print() {
+  const copyText = () => run(async () => { await emit('texto'); await navigator.clipboard.writeText(reportPlainText(content)); setCopied(true); window.setTimeout(() => setCopied(false), 2000) })
+  const copyLink = () => run(async () => { const l = link ?? await makeLink(); await navigator.clipboard.writeText(l.url); setCopied(true); window.setTimeout(() => setCopied(false), 2000) })
+  const whatsapp = () => run(async () => {
+    // o texto do relatório não vai na URL: vai só o link, que o servidor controla e pode revogar
+    const l = link ?? await makeLink()
+    window.open(`https://wa.me/?text=${encodeURIComponent(`Relatório de desenvolvimento de ${athlete.name}: ${l.url}`)}`, '_blank', 'noopener')
+  })
+  const print = () => run(async () => {
+    await emit('impressao')
     document.body.classList.add('printing-report')
     const done = () => { document.body.classList.remove('printing-report'); window.removeEventListener('afterprint', done) }
     window.addEventListener('afterprint', done)
     window.print()
-  }
+  })
+  const revoke = () => run(async () => { if (!link) return; await revokeReport(link.id); setLink(null); if (teamId) setHistory(await fetchEmissions(teamId, athlete.id)) })
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -116,59 +124,44 @@ export function ParentReport({ athlete, category, clubName, coachName, sessions,
               <option value="all">Todo o histórico</option>
             </select>
           </label>
+          <label htmlFor="pr-resp" className="wide">Entregue para
+            <select id="pr-resp" value={responsavelId} onChange={(e) => setResponsavelId(e.target.value)}>
+              <option value="">Responsável não identificado (fica registrado com aviso)</option>
+              {responsaveis.map((r) => <option key={r.id} value={r.id}>{r.nome}</option>)}
+            </select>
+          </label>
           <label htmlFor="pr-msg" className="wide">Mensagem do treinador
             <textarea id="pr-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Ex.: Parabéns pela dedicação neste mês. Seguimos trabalhando a finalização com a perna esquerda." />
           </label>
         </div>
 
-        <article className="report-sheet" aria-label="Prévia do relatório">
-          <header className="sheet-head">
-            <div><span className="sheet-club">{clubName || 'ActionLog'}</span><h2 id="parent-title">Relatório de desenvolvimento</h2></div>
-            <span className="sheet-date">{br(today)}</span>
-          </header>
-          <dl className="sheet-facts">
-            <div><dt>Atleta</dt><dd>{athlete.name}</dd></div>
-            <div><dt>Categoria</dt><dd>{category}{athlete.positions ? ` · ${athlete.positions}` : ''}</dd></div>
-            <div><dt>Período</dt><dd>{evaluation?.period || periodText}</dd></div>
-            {coachName && <div><dt>Treinador</dt><dd>{coachName}</dd></div>}
-          </dl>
+        {mentioned.length > 0 && <p className="parent-warn no-print" role="alert">Os textos citam {mentioned.join(', ')}. O relatório de um atleta não pode expor outro atleta pelo nome. Revise a mensagem e a avaliação antes de entregar.</p>}
+        {!canEmit && <p className="parent-warn no-print" role="alert">{readOnly ? 'Seu acesso é só de leitura: não emite relatório.' : 'Entre na conta do clube para emitir: toda entrega fica registrada.'}</p>}
 
-          {evaluation ? (
-            <section>
-              <h3>Avaliação do treinador</h3>
-              <p className="sheet-hint">Notas de 1 a 5: 1 {SCORE_LABEL[1].toLowerCase()}, 3 {SCORE_LABEL[3].toLowerCase()}, 5 {SCORE_LABEL[5].toLowerCase()}.{previous ? ` Comparação com a avaliação de ${br(previous.date)}.` : ''}</p>
-              <table className="sheet-table">
-                <tbody>{groupRows.map((r) => (
-                  <tr key={r.group}><th>{r.group}</th><td className="sheet-stars">{stars(r.now)}</td><td>{formatScore(r.now)}</td><td className={r.t ? `trend-${r.t}` : ''}>{r.t ? TREND_LABEL[r.t] : ''}</td></tr>
-                ))}</tbody>
-              </table>
-              <p className="sheet-criteria">{CRITERIA.filter((c) => evaluation.scores[c.key]).map((c) => `${c.label}: ${evaluation.scores[c.key]}`).join(' · ')}</p>
-              {(evaluation.strengths || evaluation.improvements || evaluation.goals) && (
-                <div className="sheet-notes">
-                  {evaluation.strengths && <div><h4>Pontos fortes</h4><p>{evaluation.strengths}</p></div>}
-                  {evaluation.improvements && <div><h4>O que estamos trabalhando</h4><p>{evaluation.improvements}</p></div>}
-                  {evaluation.goals && <div><h4>Metas para o próximo período</h4><p>{evaluation.goals}</p></div>}
-                </div>
-              )}
-            </section>
-          ) : <section><h3>Avaliação do treinador</h3><p className="sheet-hint">Ainda não há avaliação registrada para este atleta. Faça uma avaliação para o relatório ficar completo.</p></section>}
+        <ReportSheet content={content} titleId="parent-title" />
 
-          {onField.length > 0 && (
-            <section>
-              <h3>Em campo</h3>
-              <ul className="sheet-list">{onField.map((line) => <li key={line}>{line}</li>)}</ul>
-            </section>
-          )}
-
-          {message.trim() && <section className="sheet-message"><h3>Mensagem do treinador</h3><p>{message.trim()}</p>{coachName && <p className="sheet-sign">{coachName}</p>}</section>}
-          <footer className="sheet-foot">Relatório gerado pelo ActionLog</footer>
-        </article>
+        {notice && <p className="parent-warn no-print" role="status">{notice}</p>}
+        {link && (
+          <div className="parent-link no-print">
+            <input readOnly value={link.url} aria-label="Link do relatório" onFocus={(e) => e.currentTarget.select()} />
+            <span>vale até {link.expira ? new Date(link.expira).toLocaleDateString('pt-BR') : '—'}</span>
+            <button className="secondary-button" onClick={() => void revoke()} disabled={busy} type="button">Revogar link</button>
+          </div>
+        )}
 
         <div className="modal-actions no-print">
-          <button className="secondary-button" onClick={() => void copy()} type="button">{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copiado' : 'Copiar texto'}</button>
-          <a className="secondary-button" href={`https://wa.me/?text=${encodeURIComponent(plainText())}`} target="_blank" rel="noreferrer"><MessageCircle size={15} /> WhatsApp</a>
-          <button className="primary-button" onClick={print} type="button"><Printer size={15} /> Imprimir ou salvar PDF</button>
+          <button className="secondary-button" onClick={() => void copyText()} disabled={busy || !canEmit} type="button">{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copiado' : 'Copiar texto'}</button>
+          <button className="secondary-button" onClick={() => void copyLink()} disabled={busy || !canEmit} type="button"><Link2 size={15} /> Copiar link</button>
+          <button className="secondary-button" onClick={() => void whatsapp()} disabled={busy || !canEmit} type="button"><MessageCircle size={15} /> WhatsApp (link)</button>
+          <button className="primary-button" onClick={() => void print()} disabled={busy || !canEmit} type="button"><Printer size={15} /> Imprimir ou salvar PDF</button>
         </div>
+
+        {history.length > 0 && (
+          <div className="parent-emissions no-print" aria-label="Relatórios já emitidos para este atleta">
+            <strong>Já emitidos</strong>
+            {history.slice(0, 5).map((h) => <span key={h.id}>{new Date(h.emitidoEm).toLocaleString('pt-BR')} · {CANAL_LABEL[h.canal] ?? h.canal}{h.temLink ? ` · ${h.revogadoEm ? 'revogado' : `${h.acessos} acesso${h.acessos === 1 ? '' : 's'}`}` : ''}{h.aviso ? ` · ${h.aviso}` : ''}</span>)}
+          </div>
+        )}
       </div>
     </div>
   )

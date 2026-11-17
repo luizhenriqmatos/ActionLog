@@ -203,3 +203,10 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - UI disciplina no LiveMatch (painel só para o comando): amarelo, vermelho, impedimento (com ou sem atleta). 2º amarelo expulsa na hora na tela (withDerivedReds) e o servidor cria o vermelho derivado. Expulso sai de campo e some da lista de entradas. match_event_escopo: disciplina = só comando.
 - Não verificado em produção na tela real.
 - Escalação: arrastar e soltar (mouse e toque pela bolinha), campo ao lado da lista no computador, barra Salvar sem flutuar sobre a lista; toque continua como alternativa. Testado em harness headless (desktop e 390px).
+
+## Fase 5.1 (relatório da família)
+- Banco: relatorio_emissao + emitir_relatorio/revogar_relatorio/relatorio_publico (testado com rollback). Hash sha256 calculado no servidor; token do link só guardado em hash; validade 30 dias; revogar limpa o conteúdo.
+- App: src/lib/report.ts (conteúdo estruturado, só dados do atleta, jogo-treino fora via politica_contagem.visivel_familia, aviso de outro atleta citado nos textos), ReportSheet (sempre claro), PublicReport (?r=token), ParentReport refeito: toda entrega registra antes de sair; WhatsApp manda só o link.
+- Decisões tomadas sem resposta explícita: emitir sem responsável é permitido com aviso gravado; link público com código de 192 bits, 30 dias, revogável; sem conexão não entrega (log obrigatório).
+- Não feito: exportar imagem (PDF via impressão); relatório de partida interna com as duas categorias; hash do conteúdo só confere no servidor.
+- Limitação: filtro de jogo-treino só funciona em clube com partida espelhada (flag partida_v2).
