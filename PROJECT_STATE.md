@@ -214,3 +214,10 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 ## Fase 5.2 (parcial)
 - Views v_athlete_totals e v_scout_session_rates: remoção NÃO aplicada (o servidor pediu confirmação do DROP e ficou sem resposta). As views continuam no banco. Sem dependências e sem leitura no app; aplicar só com confirmação do Luiz.
 - PENDENTE 5.2: agregado por participante_id a partir dos eventos e teste de reprodutibilidade do snapshot.
+
+## Fase 5.3 (tema)
+- Tokens conferidos no canvas 4oWrYu3nmTVNGAu974dBSH (Painel.dc.html): batem com o documento; bug do escuro circular confirmado e NÃO replicado (valores escuros reais, todos AA sobre #0b0b0b: azul #6fb0dc, verde #5fbf6e, rosa #e07aa8, âmbar #e0a44a, vermelho #f0786b).
+- Escuro do app MANTIDO como estava (grafite #131316), sem trocar para #0b0b0b da referência: decisão para não mudar a cara na semana do jogo. Claro novo troca as variáveis existentes. Nomes novos (--rule --panel --fill --body --accent --c-*) existem para componentes novos.
+- Preferência em localStorage 'scouthouse.theme' (chave nova, sem chave antiga a migrar); padrão = prefers-color-scheme, sem nada = escuro. Botão no cabeçalho da categoria.
+- Relatório (folha e página do link) sempre claro: data-theme="light" + cores próprias.
+- Pendente: ainda há cores fixas em alguns pontos (campo verde da escalação é de propósito); revisar telas no claro uma a uma no celular.
