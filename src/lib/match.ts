@@ -61,7 +61,7 @@ export const PLAYER_ACTIONS: Array<{ kind: PlayerAction; metric: GameMetric; lab
   { kind: 'tackle', metric: 'tackles', label: 'Desarme', short: 'Desarme', tone: 'purple' },
   { kind: 'interception', metric: 'interceptions', label: 'Interceptação', short: 'Intercep.', tone: 'purple' },
   { kind: 'possession_loss', metric: 'possessionLoss', label: 'Perda de posse', short: 'Perda', tone: 'orange' },
-  { kind: 'shot', metric: 'shots', label: 'Finalização', short: 'Final.', tone: 'blue' },
+  { kind: 'shot', metric: 'shots', label: 'Finalização para fora', short: 'Fora', tone: 'blue' },
   { kind: 'shot_on_target', metric: 'shotsOnTarget', label: 'Finalização no gol', short: 'No gol', tone: 'blue' },
   { kind: 'goal', metric: 'goals', label: 'Gol', short: 'Gol', tone: 'yellow' },
   { kind: 'assist', metric: 'assists', label: 'Assistência', short: 'Assist.', tone: 'yellow' },
@@ -308,17 +308,17 @@ export const roundMinutes = (seconds: number) => Math.round(seconds / 60)
 /* ---------- sessão gerada ao finalizar ---------- */
 
 /**
- * Totais do atleta prontos para scout_sessions (D-M): grava exatamente o que foi registrado.
- * Antes, gol sem "no gol" virava "no gol" e "no gol" sem "finalização" virava finalização — números
- * que ninguém marcou e que iam para a temporada e para o relatório da família. Agora a incoerência
- * vira aviso na revisão pós-jogo, e quem registrou corrige se faltou marcar.
+ * Totais do atleta prontos para scout_sessions.
+ * Os três botões de chute são excludentes: "Finalização para fora", "No gol" (defendida) e "Gol".
+ * O total de finalizações é a soma dos três e o "no gol" da sessão inclui os gols. Isso é definição
+ * do botão, não correção: o que ninguém marcou continua sem existir. Por isso, na sessão gerada,
+ * gols <= no gol <= finalizações sempre, sem aviso a conferir.
  */
 export function sessionTotals(raw: PlayerTotals): { totals: PlayerTotals; adjusted: boolean; warnings: string[] } {
   const totals = { ...raw }
-  const warnings: string[] = []
-  if (totals.goals > totals.shotsOnTarget) warnings.push(`${totals.goals} gol(s) e ${totals.shotsOnTarget} finalização(ões) no gol`)
-  if (totals.shotsOnTarget > totals.shots) warnings.push(`${totals.shotsOnTarget} no gol e ${totals.shots} finalização(ões)`)
-  return { totals, adjusted: false, warnings }
+  totals.shotsOnTarget = raw.shotsOnTarget + raw.goals
+  totals.shots = raw.shots + raw.shotsOnTarget + raw.goals
+  return { totals, adjusted: false, warnings: [] }
 }
 
 /* ---------- setor do observador (D-L) ---------- */

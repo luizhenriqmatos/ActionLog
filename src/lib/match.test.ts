@@ -96,15 +96,20 @@ test('coletivo = soma dos atletas + escanteios; placar', () => {
   assert.equal(collective(events, 2).interceptions, 1)
 })
 
-test('sessão gerada (D-M): grava o registrado, não inventa finalização, e avisa', () => {
-  const r = sessionTotals({ goals: 1, assists: 0, shots: 0, shotsOnTarget: 0, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0 })
-  assert.equal(r.adjusted, false)
-  assert.equal(r.totals.goals, 1)
-  assert.equal(r.totals.shotsOnTarget, 0)
-  assert.equal(r.totals.shots, 0)
-  assert.equal(r.warnings.length, 1)
-  const ok = sessionTotals({ goals: 1, assists: 0, shots: 3, shotsOnTarget: 2, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0 })
-  assert.deepEqual(ok.warnings, [])
+test('sessão gerada: finalizações = fora + no gol + gol, e gols entram em "no gol"', () => {
+  const base = { assists: 0, accuratePasses: 0, wrongPasses: 0, tackles: 0, possessionLoss: 0, foulsCommitted: 0, foulsSuffered: 0, interceptions: 0 }
+  const soGol = sessionTotals({ ...base, goals: 1, shots: 0, shotsOnTarget: 0 })
+  assert.equal(soGol.adjusted, false)
+  assert.equal(soGol.totals.goals, 1)
+  assert.equal(soGol.totals.shotsOnTarget, 1)
+  assert.equal(soGol.totals.shots, 1)
+  assert.deepEqual(soGol.warnings, [])
+  const misto = sessionTotals({ ...base, goals: 1, shots: 3, shotsOnTarget: 2 })
+  assert.equal(misto.totals.shots, 6)
+  assert.equal(misto.totals.shotsOnTarget, 3)
+  assert.equal(misto.totals.goals, 1)
+  const nada = sessionTotals({ ...base, goals: 0, shots: 0, shotsOnTarget: 0 })
+  assert.equal(nada.totals.shots, 0)
 })
 
 test('taxa com registro incoerente fica sem valor, sem passar de 100%', async () => {

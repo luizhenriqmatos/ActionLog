@@ -43,4 +43,4 @@ Continue tocando normalmente. Aparece **"N aguardando envio"** no topo; quando a
 ## 7. No fim
 O comando toca em **Encerrar 2ºT** e depois em **Finalizar jogo**. Aparece o resumo (coletivo por tempo, cada atleta com minutos jogados e lance a lance). O scout de cada atleta vai sozinho para **Números**, para o histórico e para o relatório dos pais.
 
-Se aparecer **Conferir o registro**, é porque algum atleta ficou com gol sem "no gol" ou com "no gol" sem "finalização". O sistema **não completa** o que faltou: corrija a sessão do atleta em **Números** se faltou marcar. Até lá, o aproveitamento dele naquele jogo fica sem valor.
+Os três botões de chute não se misturam: **Finalização para fora**, **No gol** (defendida) e **Gol**. Marque só o que aconteceu: um gol é só "Gol", não precisa marcar mais nada. O total de finalizações do atleta é a soma dos três, e o "no gol" do relatório já inclui os gols. O sistema **não completa** o que ninguém marcou; se faltou um lance, corrija a sessão do atleta em **Números**.
