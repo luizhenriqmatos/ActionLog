@@ -1,0 +1,4 @@
+-- ScoutHouse v2 · Fase 3.5 (parte 2). Aplicada em produção como `v2_espelho_seguro_e_flag_clube_novo`.
+-- espelho_falha: se o espelho matches→partida ou eventos→períodos falhar, registra o erro e segue; NUNCA derruba a gravação do jogo.
+-- Clube criado daqui em diante nasce com clube_recurso.partida_v2 ligado (só espelha; matches continua a fonte de verdade).
+-- Clubes existentes continuam desligados.
