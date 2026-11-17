@@ -165,3 +165,8 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - Placar derivado: `public.partida_placar(sessao_id)`. Dupla escrita: trigger em `matches` espelha só clubes com a flag ligada.
 - Nada do app lê estas tabelas ainda. Rollback = desligar a flag.
 - Pendente de aprovação: agrupamento de adversários em `equipe_externa` (proposta enviada ao fundador).
+
+## v2 — agrupamento de adversários e Fase 3.2 (expand) · 17/11/2026
+- Agrupamento aprovado: 4 `equipe_externa` (Vitória em 2 clubes, Atlântico, Olímpia); 5 visitantes ligados. Teste e vazios ficam sem equipe.
+- `calendar_events.inicio_previsto` (timestamptz) + `hora_presumida`: 17 de 17 conferidos data a data (12:00 de Bahia). Trigger mantém o instante junto da `date` enquanto a hora é presumida; hora real nunca é sobrescrita. Testado no banco.
+- Falta na 3.2: campo de hora no app e aviso de sobreposição (sem bloquear). Só faz sentido depois que o app gravar a hora.

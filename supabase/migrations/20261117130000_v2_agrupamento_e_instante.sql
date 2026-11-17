@@ -1,0 +1,5 @@
+-- ScoutHouse v2 · agrupamento de adversários aprovado + Fase 3.2 (EXPAND): calendar_events.inicio_previsto timestamptz.
+-- Aplicada em produção como `v2_equipe_externa_agrupamento`. Agrupamento: Vitória, Atlântico, Olímpia (por clube);
+-- "jogo treino", "jogo teste", "hg" e adversário vazio ficam sem equipe externa.
+-- `date` continua existindo e sendo lida pelo app atual; o instante acompanha a data enquanto a hora for presumida (12:00 Bahia).
+-- Aplicar via o SQL registrado no histórico do Supabase (conteúdo idêntico ao descrito acima).
