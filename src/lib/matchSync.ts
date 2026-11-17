@@ -45,6 +45,7 @@ const toMatch = (r: Record<string, unknown>): MatchRow => ({
 const toPlayer = (r: Record<string, unknown>): MatchPlayer => ({
   athleteId: String(r.athlete_id), athleteName: String(r.athlete_name ?? ''), number: String(r.number ?? ''), positions: String(r.positions ?? ''),
   dominantFoot: (r.dominant_foot as Foot) ?? 'Direita', sector: r.sector as Sector, starter: Boolean(r.starter), onField: Boolean(r.on_field),
+  slot: (r.slot as string | null) ?? null,
 })
 
 const toEvent = (r: Record<string, unknown>): MatchEvent => ({
@@ -271,7 +272,7 @@ export function saveLineup(matchId: string, teamId: string, players: MatchPlayer
     op: 'players',
     rows: players.map((p) => ({
       match_id: matchId, team_id: teamId, athlete_id: p.athleteId, athlete_name: p.athleteName, number: p.number, positions: p.positions,
-      dominant_foot: p.dominantFoot, sector: p.sector, starter: p.starter, on_field: p.onField, updated_at: updatedAt,
+      dominant_foot: p.dominantFoot, sector: p.sector, starter: p.starter, on_field: p.onField, slot: p.slot ?? null, updated_at: updatedAt,
     })),
   })
 }

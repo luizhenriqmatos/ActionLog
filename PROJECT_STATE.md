@@ -188,3 +188,8 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - **Ainda não ligado:** `clube_recurso.partida_v2` está desligado em todos os clubes. Ligar = `insert into clube_recurso (clube_id, recurso, ligado) values ('<clube>', 'partida_v2', true)`; desligar = `update ... set ligado = false`. Duas rodadas de jogos reais com 0 falhas antes de qualquer troca de leitura.
 - Espelho seguro: erro no espelho vai para `espelho_falha` e não derruba o jogo. Conferir também `select * from espelho_falha` depois de cada jogo. Clube novo já nasce com `partida_v2` ligado (testado: jogo espelhado, conferidor 0 falhas); clubes existentes seguem desligados.
 - Limite conhecido: jogo entre categorias do mesmo clube ainda é registrado como uma categoria contra "adversário" em texto (o lado interno x interno só existe no banco; falta a tela). Sugestão para esta semana: adversário "Sub-16 (interno)".
+
+## Escalação em campo (estilo FIFA/PES) · 17/11/2026
+- Tela de relação do jogo virou campo com formação (4-3-3, 4-4-2, 4-2-3-1, 3-5-2, 3-4-3), banco e "Sugerir" (usa a posição cadastrada; quem não tem posição fica de fora para a comissão escalar). Toque no atleta, depois no lugar; toque num titular para trocar de lugar; titulares travam com o jogo em andamento.
+- O lugar escolhido (`match_players.slot`, ex. `433.ZAG1`) define o setor do titular (D-L). Regras puras em `src/lib/formation.ts` (6 testes), tela em `src/components/LineupBoard.tsx`.
+- Não faz ainda: salvar a escalação como padrão da categoria (fora de um jogo), gravar a posição escolhida na ficha do atleta, arrastar e soltar, vigência de posição dentro do jogo (Fase 4.1).

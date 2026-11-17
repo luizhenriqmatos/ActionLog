@@ -42,6 +42,8 @@ export type LineupPlayer = {
   sector: Sector
   starter: boolean
   onField: boolean
+  /** Lugar no campo escolhido na escalação (ex.: '433.ZAG1'). Ausente em jogos antigos. */
+  slot?: string | null
 }
 
 export const SECTORS: Array<{ id: Sector; label: string }> = [

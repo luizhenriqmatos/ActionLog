@@ -11,6 +11,7 @@ import {
   QueueFullError, SectorTakenError, claimSector, discardRejected, sectorOwnerFor, fetchMatchBundle, flushQueue, measureOffset, openMatch, pendingCount, pendingMatchOps, probeQueue, queueFull, queuedEvents, queuedUndos,
   recordEvent, rejectedItems, removeFromLineup, retryRejected, saveLineup, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow, type RejectedView, type SectorOwner,
 } from '../lib/matchSync'
+import { LineupBoard, type LineupPick } from '../components/LineupBoard'
 import { REMEASURE_MS, applySample, type OffsetSample } from '../lib/clock'
 
 type Props = {
@@ -27,7 +28,6 @@ type Props = {
 
 type SectorFilter = Sector | 'ALL'
 const sectorLabel = (s: SectorFilter) => (s === 'ALL' ? 'Todos' : SECTORS.find((x) => x.id === s)?.label ?? s)
-type LineupChoice = 'starter' | 'reserve' | 'out'
 
 const POLL_MS = 5000
 
@@ -385,7 +385,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   }
 
   /* ---------- relação ---------- */
-  function saveRelation(choices: Map<string, { choice: LineupChoice; sector: Sector }>) {
+  function saveRelation(choices: Map<string, LineupPick>) {
     if (!match) return
     const started = match.phase !== 'pre'
     const kept: MatchPlayer[] = []
@@ -396,7 +396,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
       const starter = started ? Boolean(existing?.starter) : pick.choice === 'starter'
       kept.push({
         athleteId: athlete.id, athleteName: athlete.name, number: athlete.number, positions: athlete.positions, dominantFoot: athlete.dominantFoot,
-        sector: pick.sector, starter, onField: started ? Boolean(existing?.onField) : starter,
+        sector: pick.sector, starter, onField: started ? Boolean(existing?.onField) : starter, slot: pick.slot,
       })
     }
     if (!kept.some((p) => p.starter)) { setToast('Marque pelo menos 1 titular'); return }
@@ -536,7 +536,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
       {readOnly && <p className="live-note">Seu acesso é só de leitura: você acompanha, mas não registra ações.</p>}
 
       {view === 'lineup' && isCommander && (
-        <LineupEditor athletes={athletes} players={players} started={match.phase !== 'pre'} onSave={saveRelation} onCancel={() => setView('live')} />
+        <LineupBoard athletes={athletes} players={players} started={match.phase !== 'pre'} onSave={saveRelation} onCancel={() => setView('live')} />
       )}
 
       {view === 'summary' && (
@@ -655,51 +655,6 @@ const byNumber = (a: MatchPlayer, b: MatchPlayer) => (Number(a.number) || 999) -
 const emptyGame = () => Object.fromEntries(GAME_KEYS.map((k) => [k, 0])) as SessionRecord['stats']['game']
 
 /* ---------- relação ---------- */
-function LineupEditor({ athletes, players, started, onSave, onCancel }: { athletes: Athlete[]; players: MatchPlayer[]; started: boolean; onSave: (c: Map<string, { choice: LineupChoice; sector: Sector }>) => void; onCancel: () => void }) {
-  const [choices, setChoices] = useState(() => new Map(athletes.map((a) => {
-    const p = players.find((x) => x.athleteId === a.id)
-    return [a.id, { choice: (p ? (p.starter ? 'starter' : 'reserve') : players.length ? 'out' : 'reserve') as LineupChoice, sector: p?.sector ?? suggestSector(a.positions) }]
-  })))
-  const set = (id: string, patch: Partial<{ choice: LineupChoice; sector: Sector }>) => setChoices((m) => new Map(m).set(id, { ...(m.get(id) as { choice: LineupChoice; sector: Sector }), ...patch }))
-  const starters = [...choices.values()].filter((c) => c.choice === 'starter').length
-  const reserves = [...choices.values()].filter((c) => c.choice === 'reserve').length
-  const sorted = [...athletes].sort(byTacticalOrder)
-  return (
-    <section className="lineup">
-      <div className="lineup-head">
-        <div><strong>Relação do jogo</strong><small>{starters} titulares · {reserves} reservas{started ? ' · jogo em andamento: titulares travados' : ''}</small></div>
-      </div>
-      {athletes.length === 0 && <p className="live-muted">Cadastre atletas no Elenco desta categoria primeiro.</p>}
-      <ul className="lineup-list">
-        {sorted.map((a) => {
-          const c = choices.get(a.id) as { choice: LineupChoice; sector: Sector }
-          return (
-            <li key={a.id} className={`lineup-row ${c.choice}`}>
-              <div className="lineup-name"><span className="live-number">{a.number || '—'}</span><span><strong>{a.name}</strong><small>{a.positions || 'sem posição'}</small></span></div>
-              <div className="lineup-controls">
-                <div className="seg" role="radiogroup" aria-label={`Situação de ${a.name}`}>
-                  {(['starter', 'reserve', 'out'] as LineupChoice[]).map((opt) => (
-                    <button key={opt} role="radio" aria-checked={c.choice === opt} className={c.choice === opt ? 'on' : ''} disabled={started && (opt === 'starter' || c.choice === 'starter')} onClick={() => set(a.id, { choice: opt })} type="button">
-                      {opt === 'starter' ? 'Titular' : opt === 'reserve' ? 'Reserva' : 'Fora'}
-                    </button>
-                  ))}
-                </div>
-                <select className="chip-select" value={c.sector} onChange={(e) => set(a.id, { sector: e.target.value as Sector })} aria-label={`Setor de ${a.name}`} disabled={c.choice === 'out'}>
-                  {SECTORS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-      <div className="lineup-actions">
-        {players.length > 0 && <button className="secondary-button" onClick={onCancel} type="button">Cancelar</button>}
-        <button className="primary-button" onClick={() => onSave(choices)} disabled={starters === 0 && !started} type="button"><Check size={16} /> Salvar relação</button>
-      </div>
-    </section>
-  )
-}
-
 /* ---------- resumo ---------- */
 function MatchSummary({ match, players, events, clubName, finished, onBack }: { match: MatchRow; players: MatchPlayer[]; events: MatchEvent[]; clubName: string; finished: boolean; onBack: () => void }) {
   const live = match.phase === 'first' || match.phase === 'second' ? { period: match.period, seconds: clockSeconds(match, Date.now()) } : undefined
