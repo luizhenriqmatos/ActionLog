@@ -154,4 +154,14 @@ Migrations `20261116190000` a `20261116193000`, desfazer em `supabase/rollback/`
 - **D-L setor no servidor:** `sessao_registro` (setor por observador, com início/fim, um dono por setor), `match_comando` (histórico do comando), RPC `assumir_setor`, trigger `match_events_escopo` recusa lance de atleta de setor com outro dono e coletivo/período/substituição de quem não comandava (folga de 30 s). Só origem `ao_vivo`.
 - **D-M contagem real:** CHECKs `game_on_target_le_shots` e `game_goals_le_on_target` removidos; `sessionTotals` não ajusta mais; taxa com numerador > denominador fica sem valor (`inconsistent`). 5 sessões históricas com finalização inventada corrigidas para a contagem dos eventos (valores antigos no backup).
 - **Data de nascimento:** `athletes.birth_date`, campo no cadastro, idade calculada; consentimento do responsável vence aos 18 anos; anonimização apaga a data.
-- Observação para D-M: em 5 de 6 casos o observador marcou "no gol" sem "finalização" — indica que a equipe entende "Finalização" como "para fora". Vale decidir se o botão vira "Final. fora" e o total passa a ser a soma.
+- D-M, desfecho: em 5 de 6 casos o observador marcou "no gol" sem "finalização"; o botão virou **Finalização para fora** e a sessão gerada soma os três botões (fora + no gol + gol; o "no gol" da sessão inclui os gols). Eventos antigos de tipo `shot` seguem como estão; só as sessões geradas daqui em diante usam a soma.
+
+## v2 — Fase 3.1 · sessao, partida, partida_participante · 17/11/2026 (EXPAND, atrás de flag)
+Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2_partida_fase_3_1`; existe também um registro vazio `v2_partida` no histórico, criado por engano, sem efeito), desfazer em `supabase/rollback/20261117120000_v2_partida.down.sql`, testes em `supabase/tests/v2_fase3_1.sql` (saída `FASE 3.1 OK (rollback)`).
+- Tabelas novas: `sessao`, `partida` (sem categoria, sem adversário, sem placar), `partida_participante`, `equipe_externa` (vazia), `clube_recurso` (flag por clube; recurso `partida_v2`, desligado).
+- Backfill: 8 `matches` viraram 8 partidas e 16 participantes. Mandante = categoria interna (convenção: a v1 não registra mandante); visitante = `equipe_externa` com `equipe_externa_id` NULO e o texto original em `nome_exibicao`. Hora presumida 12:00 de Bahia (`hora_presumida = true`); datas conferidas uma a uma (8 de 8).
+- Invariantes no COMMIT: exatamente 2 participantes, 1 mandante e 1 visitante, categorias diferentes. "Atleta nos dois lados" espera a escalação (Fase 4.1).
+- Identidade: índice único `(categoria_id, inicio_previsto)` só para hora REAL. Hora presumida não bloqueia (dois jogos da mesma categoria no mesmo dia continuam possíveis). Proibido voltar a `UNIQUE(categoria, data)`.
+- Placar derivado: `public.partida_placar(sessao_id)`. Dupla escrita: trigger em `matches` espelha só clubes com a flag ligada.
+- Nada do app lê estas tabelas ainda. Rollback = desligar a flag.
+- Pendente de aprovação: agrupamento de adversários em `equipe_externa` (proposta enviada ao fundador).
