@@ -90,7 +90,7 @@ export function PerformanceTab({ category, athletes, sessions, onEdit, onDelete 
       return { ...base, sessoes: fin.sessions, finalizacoes: fin.shots, finalizacoes_no_gol: fin.onTarget, gols: fin.goals, finalizacoes_dominante: fin.dominant.shots, gols_dominante: fin.dominant.goals, finalizacoes_nao_dominante: fin.nonDominant.shots, gols_nao_dominante: fin.nonDominant.goals, aproveitamento_pct: r[0].value, conversao_pct: r[1].value, eficiencia_dominante_pct: r[2].value, eficiencia_nao_dominante_pct: r[3].value }
     })
     const meta = { schema_version: 2, categoria: category, tipo: mode === 'game' ? 'partidas' : 'treino_finalizacao', periodo: preset === 'all' ? 'todo' : range, gerado_em: new Date().toISOString() }
-    const name = `actionlog-${category.toLowerCase()}-${mode === 'game' ? 'partidas' : 'finalizacao'}-${today}.${format}`
+    const name = `scouthouse-${category.toLowerCase()}-${mode === 'game' ? 'partidas' : 'finalizacao'}-${today}.${format}`
     if (format === 'json') { downloadBlob(name, new Blob([JSON.stringify({ ...meta, atletas: rows }, null, 2)], { type: 'application/json' })); return }
     const cols = rows.length ? Object.keys(rows[0]) : []
     const cell = (value: unknown) => {

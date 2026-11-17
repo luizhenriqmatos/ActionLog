@@ -221,3 +221,10 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - Preferência em localStorage 'scouthouse.theme' (chave nova, sem chave antiga a migrar); padrão = prefers-color-scheme, sem nada = escuro. Botão no cabeçalho da categoria.
 - Relatório (folha e página do link) sempre claro: data-theme="light" + cores próprias.
 - Pendente: ainda há cores fixas em alguns pontos (campo verde da escalação é de propósito); revisar telas no claro uma a uma no celular.
+
+## Fase 5.4 (renomeação) — parcial, por passos
+- Textos de interface, <title>, meta description, manifest de rotas (manus-routes.json), guia e nomes de arquivos baixados: ActionLog → ScoutHouse. Marca "S" no lugar de "A".
+- Chaves migradas com leitura da velha (readMigrated: lê nova, senão copia da velha; nunca apaga a velha; escreve só na nova), cada uma com teste e conferida em navegador: actionlog_hub_state_v1 → scouthouse_hub_state_v1 (réplica do aparelho); actionlog_sync_v1 → scouthouse_sync_v1; actionlog_sector_<jogo> → scouthouse_sector_<jogo>; sessionStorage actionlog_pending_invite → scouthouse_pending_invite.
+- NÃO renomeadas de propósito (semana de jogo): fila de eventos do jogo (actionlog_match_queue_v1) e fila de recusados (actionlog_match_rejected_v1). Têm evento pendente dentro; renomear só depois do jogo, com esvaziamento da fila ou merge das duas. Chaves velhas LEGACY (actionlog_state/data/roster) seguem só leitura.
+- Parar de ler as chaves velhas: só depois de pelo menos um ciclo de versão (APP_BUILD) e aval do Luiz.
+- Fora do escopo, como combinado: domínios (action-log-eight.vercel.app, actionlog-ezegs2as.manus.space em app.config.ts), tabelas, variáveis de ambiente, nome do repositório. package.json name "actionlog" e comentários no código não alterados.

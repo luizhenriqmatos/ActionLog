@@ -6,7 +6,7 @@ import { NewPasswordPanel, ROLE_LABEL, SignedOut } from '../components/SyncPanel
 type SyncApi = ReturnType<typeof useSync>
 
 function Brand() {
-  return <div className="topline"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div>
+  return <div className="topline"><span className="brand-mark">S</span><span className="wordmark">SCOUTHOUSE</span></div>
 }
 
 /** Primeira tela: entrar, criar conta ou recuperar senha. */
@@ -71,7 +71,7 @@ export function ProfileScreen({ sync }: { sync: SyncApi }) {
 
   return (
     <main className="app-shell profile-shell">
-      <div className="topline"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span>
+      <div className="topline"><span className="brand-mark">S</span><span className="wordmark">SCOUTHOUSE</span>
         <button className="secondary-button topline-sync" onClick={() => void sync.signOut()} type="button"><LogOut size={15} /> Sair</button>
       </div>
       <section className="picker-hero">

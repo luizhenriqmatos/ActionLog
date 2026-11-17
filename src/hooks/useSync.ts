@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { readMigrated } from '../lib/storageKeys'
 import type { Session } from '@supabase/supabase-js'
 import { type AppData, type CategoryId, emptyAppData } from '../types'
 import { supabase } from '../lib/supabase'
@@ -10,12 +11,14 @@ import {
 
 export type SyncStatus = 'disabled' | 'signed-out' | 'syncing' | 'synced' | 'offline' | 'error'
 
-const SYNC_KEY = 'actionlog_sync_v1'
-const INVITE_KEY = 'actionlog_pending_invite'
+const SYNC_KEY = 'scouthouse_sync_v1'
+const OLD_SYNC_KEY = 'actionlog_sync_v1'
+const INVITE_KEY = 'scouthouse_pending_invite'
+const OLD_INVITE_KEY = 'actionlog_pending_invite'
 type Saved = { userId: string; teamId: string; pushed: Record<string, string>; lastSyncAt: string; pushedTeamName: string; clubs: Club[] }
 
 function readSaved(): Partial<Saved> {
-  try { return JSON.parse(window.localStorage.getItem(SYNC_KEY) ?? '{}') as Partial<Saved> } catch { return {} }
+  try { return JSON.parse(readMigrated(window.localStorage, SYNC_KEY, [OLD_SYNC_KEY]) ?? '{}') as Partial<Saved> } catch { return {} }
 }
 function writeSaved(value: Partial<Saved>) {
   try { window.localStorage.setItem(SYNC_KEY, JSON.stringify(value)) } catch { /* sem localStorage: sincroniza só nesta aba */ }
@@ -31,7 +34,7 @@ function captureInviteFromUrl(): string {
       url.searchParams.delete('convite')
       window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     }
-    return window.sessionStorage.getItem(INVITE_KEY) ?? ''
+    return readMigrated(window.sessionStorage, INVITE_KEY, [OLD_INVITE_KEY]) ?? ''
   } catch { return '' }
 }
 
@@ -188,7 +191,7 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
       let joined = ''
       if (pendingInvite) {
         try { joined = await acceptInvite(supabase!, pendingInvite); setInviteError('') } catch (err) { setInviteError(errorText(err)) }
-        try { window.sessionStorage.removeItem(INVITE_KEY) } catch { /* ignora */ }
+        try { window.sessionStorage.removeItem(INVITE_KEY); window.sessionStorage.removeItem(OLD_INVITE_KEY) } catch { /* ignora */ }
         setPendingInvite('')
       }
       const list = await refreshClubs()
@@ -307,7 +310,7 @@ export function useSync(data: AppData, setData: (updater: (previous: AppData) =>
 
 function friendlyAuthError(message: string) {
   if (/rate limit|too many|security purposes/i.test(message)) return 'Muitos e-mails enviados em pouco tempo. Espere alguns minutos e tente de novo.'
-  if (/not authorized/i.test(message)) return 'O servidor de e-mail ainda não está liberado para este endereço. Fale com o administrador do ActionLog.'
+  if (/not authorized/i.test(message)) return 'O servidor de e-mail ainda não está liberado para este endereço. Fale com o administrador do ScoutHouse.'
   if (/already registered|already exists/i.test(message)) return 'Este e-mail já tem conta. Use "Entrar" ou "Esqueci minha senha".'
   return message
 }

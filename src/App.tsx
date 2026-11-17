@@ -73,9 +73,12 @@ import { EvaluationForm } from './components/EvaluationForm'
 import { AthleteFile } from './components/AthleteFile'
 import { ParentReport } from './components/ParentReport'
 import { ThemeToggle } from './components/ThemeToggle'
+import { readMigrated } from './lib/storageKeys'
 import { previousOf } from './lib/evaluations'
 
-const STORAGE_KEY = 'actionlog_hub_state_v1'
+const STORAGE_KEY = 'scouthouse_hub_state_v1'
+/** Chave anterior ao nome ScoutHouse: lida e copiada, nunca apagada (migração de leitura). */
+const OLD_STORAGE_KEY = 'actionlog_hub_state_v1'
 const LEGACY_KEYS = ['actionlog_state', 'actionlog_data', 'actionlog_roster']
 const MD_OPTIONS = ['', 'MD', 'MD-1', 'MD-2', 'MD-3', 'MD-4', 'MD-5', 'MD-6', 'MD-7']
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -322,7 +325,7 @@ function normalizeLegacy(raw: unknown): AppData {
 
 function loadData(): AppData {
   try {
-    const current = window.localStorage.getItem(STORAGE_KEY)
+    const current = readMigrated(window.localStorage, STORAGE_KEY, [OLD_STORAGE_KEY])
     if (current) return normalizeStored(JSON.parse(current))
     for (const key of LEGACY_KEYS) {
       const legacy = window.localStorage.getItem(key)
@@ -367,7 +370,7 @@ function MetricButton({ label, value, tone, icon: Icon, invalid, onAdd, onRemove
 
 function CategoryPicker({ data, categories, onSelect, syncPill, clubName, onBack }: { data: AppData; categories: readonly CategoryId[]; onSelect: (category: CategoryId) => void; syncPill: ReactNode; clubName: string; onBack: () => void }) {
   const totalAthletes = Object.values(data.categories).reduce((sum, category) => sum + category.athletes.length, 0)
-  return <main className="app-shell picker-shell"><div className="topline"><button className="back-button" onClick={onBack} type="button"><ArrowLeft size={18} /> Meus clubes</button><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span><span className="topline-sync">{syncPill}</span></div><section className="picker-hero"><div className="eyebrow">{(clubName || 'Meu clube').toUpperCase()} · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{categories.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section></main>
+  return <main className="app-shell picker-shell"><div className="topline"><button className="back-button" onClick={onBack} type="button"><ArrowLeft size={18} /> Meus clubes</button><span className="brand-mark">S</span><span className="wordmark">SCOUTHOUSE</span><span className="topline-sync">{syncPill}</span></div><section className="picker-hero"><div className="eyebrow">{(clubName || 'Meu clube').toUpperCase()} · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{categories.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section></main>
 }
 
 function UpdateGate() {
@@ -648,7 +651,7 @@ function App() {
   }
 
   function downloadReport(session: SessionRecord) {
-    downloadBlob(`actionlog-${session.category.toLowerCase()}-${session.periodizationTag || 'sessao'}-${session.athleteName.toLowerCase().replace(/\s+/g, '-')}.pdf`, makePdf(reportText(session)))
+    downloadBlob(`scouthouse-${session.category.toLowerCase()}-${session.periodizationTag || 'sessao'}-${session.athleteName.toLowerCase().replace(/\s+/g, '-')}.pdf`, makePdf(reportText(session)))
     setToast('PDF gerado')
   }
 
@@ -664,7 +667,7 @@ function App() {
   const reportAthlete = current.athletes.find((a) => a.id === reportAthleteId)
   const lastEvalOf = (athleteId: string) => evaluations.filter((e) => e.athleteId === athleteId).sort((a, b) => a.date.localeCompare(b.date)).pop() ?? null
 
-  return <main className={`app-shell hub-${tab}`}><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button" aria-label="Voltar para as categorias"><span className="back-icon"><ArrowLeft size={18} /></span><span className="back-text">Categorias</span></button><div className="header-brand"><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span></div><div className="header-context"><span className="hs-team">{data.teamName || 'Meu time'}</span><label className="sr-only" htmlFor="category-switch">Trocar categoria</label><select id="category-switch" className="chip-select category-switch" value={category} onChange={(event) => { const keep = tab; selectCategory(event.target.value as CategoryId); setTab(keep) }}>{visibleCategories.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><ThemeToggle />{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub">{([
+  return <main className={`app-shell hub-${tab}`}><header className="app-header"><button className="back-button" onClick={() => setCategory(null)} type="button" aria-label="Voltar para as categorias"><span className="back-icon"><ArrowLeft size={18} /></span><span className="back-text">Categorias</span></button><div className="header-brand"><span className="brand-mark">S</span><span className="wordmark">SCOUTHOUSE</span></div><div className="header-context"><span className="hs-team">{data.teamName || 'Meu time'}</span><label className="sr-only" htmlFor="category-switch">Trocar categoria</label><select id="category-switch" className="chip-select category-switch" value={category} onChange={(event) => { const keep = tab; selectCategory(event.target.value as CategoryId); setTab(keep) }}>{visibleCategories.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><ThemeToggle />{syncPill}</header><section className="hub-intro"><div><div className="eyebrow">HUB DE CATEGORIA · {CATEGORY_INFO[category].tone.toUpperCase()}</div><h1>{category}<span>.</span></h1><p>Elenco, periodização e registro de ações em um único espaço.</p></div><div className="team-field"><label htmlFor="team-name">Nome do time</label><input id="team-name" value={data.teamName} onChange={(event) => setData((previous) => ({ ...previous, teamName: event.target.value }))} placeholder="Nome do time" /></div></section><nav className="tabs" aria-label="Navegação do hub">{([
   ['roster', Users, 'Elenco', 'Elenco', current.athletes.length],
   ['calendar', CalendarDays, 'Calendário MD', 'Agenda', current.events.length],
   ['scout', BarChart3, 'Central de Scout', 'Scout', current.sessions.length],

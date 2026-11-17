@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { readMigrated } from '../lib/storageKeys'
 import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, CloudOff, Copy, Crown, Flag, Minus, Pause, Play, Plus, RotateCcw, Square, Undo2, Users } from 'lucide-react'
 import type { Athlete, CalendarEvent, CategoryId, SessionRecord } from '../types'
 import { FINISHING_KEYS, GAME_KEYS, GAME_LABELS } from '../types'
@@ -59,7 +60,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   const pendingSince = useRef<number | null>(null)
   const [view, setView] = useState<'live' | 'lineup' | 'summary'>('live')
   const [sector, setSector] = useState<SectorFilter>(() => {
-    try { return (localStorage.getItem(`actionlog_sector_${event.id}`) as SectorFilter) || 'ALL' } catch { return 'ALL' }
+    try { return (readMigrated(localStorage, `scouthouse_sector_${event.id}`, [`actionlog_sector_${event.id}`]) as SectorFilter) || 'ALL' } catch { return 'ALL' }
   })
   const [rosterAll, setRosterAll] = useState(false)
   const [subOut, setSubOut] = useState('')
@@ -202,7 +203,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     return () => { window.clearInterval(poll); window.clearInterval(flush); window.clearInterval(tick); window.clearInterval(clock); window.removeEventListener('online', back); window.removeEventListener('offline', off) }
   }, [refresh, remeasure])
 
-  useEffect(() => { sectorRef.current = sector; try { localStorage.setItem(`actionlog_sector_${event.id}`, sector) } catch { /* ignora */ } }, [sector, event.id])
+  useEffect(() => { sectorRef.current = sector; try { localStorage.setItem(`scouthouse_sector_${event.id}`, sector) } catch { /* ignora */ } }, [sector, event.id])
 
   /**
    * Trocar de setor = assumir o setor no servidor (D-L). Quem só lê usa o filtro livremente.

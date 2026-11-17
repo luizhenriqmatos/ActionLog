@@ -94,7 +94,7 @@ export function SignedOut({ sync }: { sync: SyncApi }) {
       else if (result.needsConfirmation) { setMessage({ tone: 'info', text: `Conta criada. Abra o e-mail enviado para ${address}, clique no link de confirmação e depois entre aqui.` }); setMode('in') }
     } else {
       const err = await sync.requestPasswordReset(address)
-      setMessage(err ? { tone: 'error', text: err } : { tone: 'info', text: `Se existir uma conta com ${address}, chegou um e-mail com o link para criar uma nova senha. O link abre o ActionLog já pedindo a senha nova.` })
+      setMessage(err ? { tone: 'error', text: err } : { tone: 'info', text: `Se existir uma conta com ${address}, chegou um e-mail com o link para criar uma nova senha. O link abre o ScoutHouse já pedindo a senha nova.` })
     }
     setBusy(false)
   }
@@ -106,7 +106,7 @@ export function SignedOut({ sync }: { sync: SyncApi }) {
       {sync.pendingInvite && <div className="notice info">Você recebeu um convite (código {sync.pendingInvite}). Entre ou crie sua conta e você entra direto no time.</div>}
       {mode === 'forgot'
         ? <p className="report-meta">Informe o e-mail da conta. Vamos mandar um link para você criar uma senha nova.</p>
-        : !sync.pendingInvite && <p className="report-meta">Entre para guardar os dados na nuvem e usar o ActionLog em mais de um aparelho. O que já está neste aparelho sobe automaticamente na primeira vez.</p>}
+        : !sync.pendingInvite && <p className="report-meta">Entre para guardar os dados na nuvem e usar o ScoutHouse em mais de um aparelho. O que já está neste aparelho sobe automaticamente na primeira vez.</p>}
       <label htmlFor="sync-email">E-mail<input id="sync-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
       {mode !== 'forgot' && <label htmlFor="sync-password">Senha<input id="sync-password" type="password" autoComplete={mode === 'in' ? 'current-password' : 'new-password'} minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)} /></label>}
       {message && <div className={`notice ${message.tone === 'error' ? 'error' : 'info'}`}>{message.text}</div>}
@@ -198,7 +198,7 @@ function SignedIn({ sync }: { sync: SyncApi }) {
   }
 
   const last = sync.lastSyncAt ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(sync.lastSyncAt)) : '—'
-  const whatsapp = (invite: Invite) => `https://wa.me/?text=${encodeURIComponent(`Convite para a comissão técnica no ActionLog (${ROLE_LABEL[invite.role]}). Abra o link e crie sua conta: ${link(invite)}`)}`
+  const whatsapp = (invite: Invite) => `https://wa.me/?text=${encodeURIComponent(`Convite para a comissão técnica no ScoutHouse (${ROLE_LABEL[invite.role]}). Abra o link e crie sua conta: ${link(invite)}`)}`
 
   return (
     <div className="sync-signed">

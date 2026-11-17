@@ -1,4 +1,4 @@
-# Guia rápido · Jogo ao vivo (ActionLog)
+# Guia rápido · Jogo ao vivo (ScoutHouse)
 
 **Endereço:** https://action-log-eight.vercel.app — cada pessoa entra com a própria conta.
 
