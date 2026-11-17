@@ -280,3 +280,16 @@ export function saveLineup(matchId: string, teamId: string, players: MatchPlayer
 export function removeFromLineup(matchId: string, athleteIds: string[]) {
   if (athleteIds.length) enqueue({ op: 'players_delete', matchId, athleteIds })
 }
+
+/** Relação do último jogo da categoria (para "usar a escalação do último jogo"). Vazio se não houver. */
+export async function fetchLastLineup(teamId: string, category: string, excludeMatchId: string): Promise<MatchPlayer[]> {
+  if (!supabase) return []
+  const { data: games, error } = await supabase.from('matches').select('id').eq('team_id', teamId).eq('category', category)
+    .neq('id', excludeMatchId).order('match_date', { ascending: false }).order('created_at', { ascending: false }).limit(5)
+  if (error || !games) return []
+  for (const game of games) {
+    const { data: rows, error: e2 } = await supabase.from('match_players').select('*').eq('match_id', game.id).limit(60)
+    if (!e2 && rows && rows.some((r) => r.starter)) return rows.map(toPlayer)
+  }
+  return []
+}

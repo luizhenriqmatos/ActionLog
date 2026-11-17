@@ -9,8 +9,9 @@ import {
 } from '../lib/match'
 import {
   QueueFullError, SectorTakenError, claimSector, discardRejected, sectorOwnerFor, fetchMatchBundle, flushQueue, measureOffset, openMatch, pendingCount, pendingMatchOps, probeQueue, queueFull, queuedEvents, queuedUndos,
-  recordEvent, rejectedItems, removeFromLineup, retryRejected, saveLineup, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow, type RejectedView, type SectorOwner,
+  fetchLastLineup, recordEvent, rejectedItems, removeFromLineup, retryRejected, saveLineup, undoEvent, updateMatch, type MatchPatch, type MatchPlayer, type MatchRow, type RejectedView, type SectorOwner,
 } from '../lib/matchSync'
+import { slotPosition } from '../lib/formation'
 import { LineupBoard, type LineupPick } from '../components/LineupBoard'
 import { REMEASURE_MS, applySample, type OffsetSample } from '../lib/clock'
 
@@ -24,6 +25,8 @@ type Props = {
   readOnly: boolean
   onClose: () => void
   onSessions: (sessions: SessionRecord[]) => void
+  /** Grava a posição na ficha de atletas que não tinham (escolhida na escalação). */
+  onPositions?: (codes: Record<string, string>) => void
 }
 
 type SectorFilter = Sector | 'ALL'
@@ -31,7 +34,7 @@ const sectorLabel = (s: SectorFilter) => (s === 'ALL' ? 'Todos' : SECTORS.find((
 
 const POLL_MS = 5000
 
-export function LiveMatch({ teamId, clubName, category, event, athletes, user, readOnly, onClose, onSessions }: Props) {
+export function LiveMatch({ teamId, clubName, category, event, athletes, user, readOnly, onClose, onSessions, onPositions }: Props) {
   const [match, setMatch] = useState<MatchRow | null>(null)
   const [players, setPlayers] = useState<MatchPlayer[]>([])
   const [serverEvents, setServerEvents] = useState<MatchEvent[]>([])
@@ -385,7 +388,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   }
 
   /* ---------- relação ---------- */
-  function saveRelation(choices: Map<string, LineupPick>) {
+  function saveRelation(choices: Map<string, LineupPick>, savePositions: boolean) {
     if (!match) return
     const started = match.phase !== 'pre'
     const kept: MatchPlayer[] = []
@@ -402,6 +405,11 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     if (!kept.some((p) => p.starter)) { setToast('Marque pelo menos 1 titular'); return }
     const removed = players.filter((p) => !kept.some((k) => k.athleteId === p.athleteId) && !(started && p.onField)).map((p) => p.athleteId)
     if (!safely(() => { saveLineup(match.id, teamId, kept, serverIso()); removeFromLineup(match.id, removed) })) return
+    if (savePositions && onPositions) {
+      const codes: Record<string, string> = {}
+      for (const a of athletes) { const pick = choices.get(a.id); const code = pick?.slot ? slotPosition(pick.slot) : null; if (code && !a.positions.trim()) codes[a.id] = code }
+      if (Object.keys(codes).length) onPositions(codes)
+    }
     setPlayers(kept)
     setView('live')
     setToast(`Relação salva: ${kept.filter((p) => p.starter).length} titulares, ${kept.filter((p) => !p.starter).length} reservas`)
@@ -536,7 +544,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
       {readOnly && <p className="live-note">Seu acesso é só de leitura: você acompanha, mas não registra ações.</p>}
 
       {view === 'lineup' && isCommander && (
-        <LineupBoard athletes={athletes} players={players} started={match.phase !== 'pre'} onSave={saveRelation} onCancel={() => setView('live')} />
+        <LineupBoard loadLast={() => (match ? fetchLastLineup(teamId, category, match.id) : Promise.resolve([]))} athletes={athletes} players={players} started={match.phase !== 'pre'} onSave={saveRelation} onCancel={() => setView('live')} />
       )}
 
       {view === 'summary' && (

@@ -15,14 +15,16 @@ type Props = {
   athletes: Athlete[]
   players: MatchPlayer[]
   started: boolean
-  onSave: (picks: Map<string, LineupPick>) => void
+  onSave: (picks: Map<string, LineupPick>, savePositions: boolean) => void
+  /** Relação do último jogo da categoria, se houver. */
+  loadLast?: () => Promise<MatchPlayer[]>
   onCancel: () => void
 }
 
 const firstName = (name: string) => (name.trim().split(/\s+/)[0] ?? '').slice(0, 10)
 
 /** Escalação em campo (estilo FIFA/PES): toque no atleta e depois no lugar do campo. Quem não tem posição cadastrada é escalado aqui. */
-export function LineupBoard({ athletes, players, started, onSave, onCancel }: Props) {
+export function LineupBoard({ athletes, players, started, onSave, onCancel, loadLast }: Props) {
   const [formationId, setFormationId] = useState(() => {
     const saved = players.find((p) => p.starter && isKnownSlot(p.slot))
     return saved?.slot ? formationOfSlot(saved.slot) : DEFAULT_FORMATION
@@ -45,6 +47,8 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel }: Pr
     return [a.id, p ? 'reserve' : players.length ? 'out' : 'reserve'] as const
   })))
   const [selected, setSelected] = useState<string | null>(null)
+  const [savePositions, setSavePositions] = useState(true)
+  const [lastMsg, setLastMsg] = useState('')
 
   const byId = useMemo(() => new Map(athletes.map((a) => [a.id, a])), [athletes])
   const formation = formationById(formationId)
@@ -78,6 +82,18 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel }: Pr
     setAssign(next)
     setSelected(null)
   }
+  async function useLast() {
+    if (started || !loadLast) return
+    const last = await loadLast()
+    const starters = last.filter((p) => p.starter && isKnownSlot(p.slot) && byId.has(p.athleteId))
+    if (starters.length === 0) { setLastMsg('O último jogo não tem escalação em campo salva.'); return }
+    const id = formationOfSlot(starters[0].slot as string)
+    const next: Assignment = {}
+    for (const p of starters) if (formationOfSlot(p.slot as string) === id && !next[p.slot as string]) next[p.slot as string] = p.athleteId
+    setFormationId(id); setAssign(next); setSelected(null)
+    setLastMsg(`Escalação do último jogo aplicada (${Object.keys(next).length} titulares). Ajuste o que mudou.`)
+  }
+  const missingPosition = Object.values(assign).filter((id) => !(byId.get(id)?.positions ?? '').trim()).length
   function setBenchState(id: string, state: 'reserve' | 'out') { setBench((m) => new Map(m).set(id, state)); setSelected(null) }
   function takeOff(id: string) { setAssign((current) => removeFromSlots(current, id)); setBench((m) => new Map(m).set(id, 'reserve')); setSelected(null) }
 
@@ -90,7 +106,7 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel }: Pr
       else if (lockedStarter(a.id)) picks.set(a.id, { choice: 'starter', sector: existing?.sector ?? suggestSector(a.positions), slot: existing?.slot ?? null })
       else picks.set(a.id, { choice: bench.get(a.id) ?? 'reserve', sector: existing?.sector ?? suggestSector(a.positions), slot: null })
     }
-    onSave(picks)
+    onSave(picks, savePositions)
   }
 
   return (
@@ -106,7 +122,7 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel }: Pr
               {FORMATIONS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
             </select>
           </label>
-          <button className="secondary-button" onClick={suggest} disabled={started || athletes.length === 0} type="button"><Sparkles size={14} /> Sugerir</button>
+          {loadLast && !started && players.length === 0 && <button className="secondary-button" onClick={useLast} type="button">Último jogo</button>}<button className="secondary-button" onClick={suggest} disabled={started || athletes.length === 0} type="button"><Sparkles size={14} /> Sugerir</button>
         </div>
       </div>
       {athletes.length === 0 && <p className="live-muted">Cadastre atletas no Elenco desta categoria primeiro.</p>}
@@ -148,6 +164,8 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel }: Pr
         <p className="board-hint">{started ? 'Titulares não mudam com o jogo rolando. Use as substituições.' : 'Toque num atleta da lista e depois no lugar dele no campo. Toque num titular para trocar de lugar.'}</p>
       )}
 
+      {lastMsg && <p className="board-hint" role="status">{lastMsg}</p>}
+      {missingPosition > 0 && !started && <label className="board-check"><input type="checkbox" checked={savePositions} onChange={(e) => setSavePositions(e.target.checked)} /> Gravar a posição escolhida na ficha de {missingPosition} atleta{missingPosition > 1 ? 's' : ''} sem posição</label>}
       <ul className="board-tray" aria-label="Elenco fora do campo">
         {tray.map((a) => (
           <li key={a.id}>
