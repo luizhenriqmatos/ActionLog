@@ -181,3 +181,8 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - `match_events.participante_id`: 854 de 854 eventos no lado interno; nenhum de outra partida. Tipos como `opponent_goal` mantêm o `kind`; o lado é o interno.
 - Trigger preenche o lado para cliente antigo e recusa lado de outra partida; lado definido não muda. Testado (inclui a regra D-L, que continua valendo).
 - Pendente: NOT NULL (contract, após a dupla escrita 3.5) e trocar as somas do app de `match_id` para `participante_id` (leitura nova, atrás da flag).
+
+## v2 — Fase 3.5 (parte 1) · conferidor e trava de versão · 17/11/2026
+- `select * from reconciliar_partida_v2('<clube>')` — linhas com `ok = false` são falha dura. Hoje: 5 clubes, 0 falhas; detecta divergência (testado). Rodar só após a janela de drenagem (aparelhos com fila vazia) e depois de cada jogo da dupla escrita.
+- Trava de versão: `app_config.build_minimo` (hoje 1) vs `APP_BUILD` em `src/lib/versao.ts`. Abaixo do mínimo, o app mostra "Atualize o app para continuar" (confere ao abrir, a cada 5 min e ao voltar à aba). Falha de rede não trava. Só protege aparelhos que já têm esta versão; aparelhos anteriores não conhecem a trava.
+- **Ainda não ligado:** `clube_recurso.partida_v2` está desligado em todos os clubes. Ligar = `insert into clube_recurso (clube_id, recurso, ligado) values ('<clube>', 'partida_v2', true)`; desligar = `update ... set ligado = false`. Duas rodadas de jogos reais com 0 falhas antes de qualquer troca de leitura.

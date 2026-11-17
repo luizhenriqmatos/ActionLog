@@ -1,0 +1,7 @@
+-- ScoutHouse v2 · Fase 3.5 (parte 1) · conferidor da dupla escrita e trava de versão mínima do cliente.
+-- Aplicada em produção como `v2_conferidor_e_versao_minima_fase_3_5`.
+-- app_config(chave, valor): 'build_minimo' = menor APP_BUILD aceito (src/lib/versao.ts). Leitura pública (anon/authenticated).
+-- public.reconciliar_partida_v2(clube): security invoker; compara modelo antigo (match_id) e novo (participante_id) em
+--   partidas, participantes, eventos (total/ativos), tipo, atleta, placar, períodos e duração real. Falha dura: qualquer ok = false.
+--   Compara evento contra evento (nunca scout_sessions). Rodar só depois da janela de drenagem.
+-- Estado na aplicação: 5 clubes, 0 falhas. Teste de detecção: partida sem espelho + evento => 6 falhas (rollback).

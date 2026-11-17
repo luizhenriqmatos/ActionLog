@@ -58,6 +58,7 @@ import {
   legLabels,
 } from './types'
 import { finishingRates, formatPct, gameRates, sumFinishing, sumGame, validateFinishing, validateGame } from './lib/metrics'
+import { useOutdated } from './hooks/useOutdated'
 import { eventsByDate, isValidTime, overlappingEvents, singleEventByDate, upsertEvent } from './lib/calendar'
 import { downloadBlob } from './lib/download'
 import { PerformanceTab } from './screens/PerformanceTab'
@@ -368,6 +369,10 @@ function CategoryPicker({ data, categories, onSelect, syncPill, clubName, onBack
   return <main className="app-shell picker-shell"><div className="topline"><button className="back-button" onClick={onBack} type="button"><ArrowLeft size={18} /> Meus clubes</button><span className="brand-mark">A</span><span className="wordmark">ACTIONLOG</span><span className="topline-sync">{syncPill}</span></div><section className="picker-hero"><div className="eyebrow">{(clubName || 'Meu clube').toUpperCase()} · {totalAthletes} ATLETAS</div><h1>Escolha a categoria<br /><em>para começar.</em></h1><p>Um espaço de trabalho para acompanhar elenco, periodização e ações de cada faixa do seu time.</p></section><section className="category-grid" aria-label="Categorias do time">{categories.map((category) => { const info = CATEGORY_INFO[category]; const count = data.categories[category].athletes.length; return <button className={`category-card category-${info.accent}`} key={category} onClick={() => onSelect(category)}><span className="category-index">0{CATEGORIES.indexOf(category) + 1}</span><span className="category-copy"><strong>{category}</strong><small>{info.tone} · {info.detail}</small></span><span className="category-count">{count}<small>atletas</small></span><ChevronRight className="category-arrow" size={20} /></button> })}</section></main>
 }
 
+function UpdateGate() {
+  return <main className="update-gate" role="alertdialog" aria-labelledby="update-gate-title"><h1 id="update-gate-title">Atualize o app para continuar</h1><p>Esta versão ficou antiga e pode gravar dados no formato errado. Seus registros que ainda não foram enviados continuam guardados neste aparelho.</p><button className="primary-button" type="button" onClick={() => window.location.reload()}>Atualizar agora</button></main>
+}
+
 function App() {
   const [data, setData] = useState<AppData>(() => loadData())
   const [category, setCategory] = useState<CategoryId | null>(null)
@@ -381,6 +386,7 @@ function App() {
   const [editing, setEditing] = useState<SessionRecord | null>(null)
   const [syncOpen, setSyncOpen] = useState(false)
   const sync = useSync(data, setData)
+  const outdated = useOutdated()
   const syncPill = <SyncPill sync={sync} onOpen={() => setSyncOpen(true)} />
   const [evalTarget, setEvalTarget] = useState<{ athlete: Athlete; existing: Evaluation | null } | null>(null)
   const [fileAthleteId, setFileAthleteId] = useState('')
@@ -639,6 +645,7 @@ function App() {
     setToast('PDF gerado')
   }
 
+  if (outdated) return <UpdateGate />
   if (sync.enabled && !sync.session) return <LoginScreen sync={sync} />
   if (sync.enabled && (!sync.team || sync.recovery)) return <ProfileScreen sync={sync} />
 

@@ -291,3 +291,15 @@ test('hora do compromisso: instante da Bahia, ida e volta, e sobreposição só 
   assert.equal(overlappingEvents(events, { id: 'n', date: '2026-11-18' }).length, 0)
   assert.equal(overlappingEvents(events, { id: 'a', date: '2026-11-18', time: '15:00' }).length, 0)
 })
+
+test('trava de versão: só bloqueia quando o mínimo do servidor é maior que o build', async () => {
+  const { isOutdated, fetchMinBuild } = await import('./versao.ts')
+  assert.equal(isOutdated(2, 1), true)
+  assert.equal(isOutdated(1, 1), false)
+  assert.equal(isOutdated(null, 1), false)
+  assert.equal(isOutdated(Number.NaN, 1), false)
+  const ok = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { valor: 3 }, error: null }) }) }) }) }
+  assert.equal(await fetchMinBuild(ok), 3)
+  const falha = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => { throw new Error('offline') } }) }) }) }
+  assert.equal(await fetchMinBuild(falha), null)
+})
