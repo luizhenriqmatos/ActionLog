@@ -16,6 +16,22 @@ export type TeamAction = 'corner_for' | 'corner_against' | 'opponent_goal'
 export type SystemAction = 'sub_out' | 'sub_in' | 'period_start' | 'period_end'
 /** Disciplina. O vermelho do 2º amarelo é gerado pelo servidor; nunca se registra à mão. */
 export type DisciplineAction = 'cartao_amarelo' | 'cartao_vermelho' | 'cartao_vermelho_2o_amarelo' | 'impedimento'
+/** Disciplina que o servidor também deriva: o 2º amarelo do mesmo atleta vira vermelho no mesmo minuto. */
+export function withDerivedReds(events: MatchEvent[]): MatchEvent[] {
+  const active = activeEvents(events)
+  const out: MatchEvent[] = []
+  const yellows = new Map<string, MatchEvent[]>()
+  for (const e of active.filter((x) => x.kind === 'cartao_amarelo' && x.athleteId).sort((a, b) => a.period - b.period || a.clockSeconds - b.clockSeconds || a.createdAt.localeCompare(b.createdAt))) {
+    yellows.set(e.athleteId as string, [...(yellows.get(e.athleteId as string) ?? []), e])
+  }
+  for (const [athleteId, list] of yellows) {
+    if (list.length < 2) continue
+    if (active.some((e) => e.kind === 'cartao_vermelho_2o_amarelo' && e.athleteId === athleteId)) continue
+    const second = list[1]
+    out.push({ ...second, id: `derivado:${second.id}`, kind: 'cartao_vermelho_2o_amarelo' })
+  }
+  return [...events, ...out]
+}
 export const RED_CARDS: ReadonlyArray<EventKind> = ['cartao_vermelho', 'cartao_vermelho_2o_amarelo']
 export type EventKind = PlayerAction | TeamAction | SystemAction | DisciplineAction
 
@@ -260,7 +276,7 @@ export function minutesPlayed(
   events: MatchEvent[],
   live?: { period: Period; seconds: number },
 ): Map<string, number> {
-  const active = activeEvents(events)
+  const active = activeEvents(withDerivedReds(events))
   const result = new Map<string, number>()
   let onField = new Set(lineup.filter((p) => p.starter).map((p) => p.athleteId))
 

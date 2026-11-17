@@ -200,3 +200,5 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - 4.1/4.2 aplicadas: escalacao, escalacao_atleta, substituicao + validação de categoria/clube; substituicoes_derivar(match) ainda não chamada por nada.
 - App: minutesPlayed trata vermelho e prorrogação (61 testes).
 - PENDENTE: UI de cartões/impedimento no jogo ao vivo; gravar escalacao a partir de match_players; decidir remoção real em removeFromLineup; backfill de substituicao.
+- UI disciplina no LiveMatch (painel só para o comando): amarelo, vermelho, impedimento (com ou sem atleta). 2º amarelo expulsa na hora na tela (withDerivedReds) e o servidor cria o vermelho derivado. Expulso sai de campo e some da lista de entradas. match_event_escopo: disciplina = só comando.
+- Não verificado em produção na tela real.

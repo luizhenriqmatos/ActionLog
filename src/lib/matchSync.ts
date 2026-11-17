@@ -49,7 +49,7 @@ const toPlayer = (r: Record<string, unknown>): MatchPlayer => ({
 })
 
 const toEvent = (r: Record<string, unknown>): MatchEvent => ({
-  id: String(r.id), kind: r.kind as EventKind, athleteId: (r.athlete_id as string | null) ?? null, period: Number(r.period) === 2 ? 2 : 1,
+  id: String(r.id), kind: r.kind as EventKind, athleteId: (r.athlete_id as string | null) ?? null, period: ([1, 2, 3, 4].includes(Number(r.period)) ? Number(r.period) : 1) as Period,
   clockSeconds: Number(r.clock_seconds ?? 0), createdBy: String(r.created_by), createdByName: String(r.created_by_name ?? ''),
   createdAt: String(r.created_at), deletedAt: (r.deleted_at as string | null) ?? null,
 })

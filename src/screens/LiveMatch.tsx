@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeftRight, Check, ChevronLeft, CloudOff, Copy, Crow
 import type { Athlete, CalendarEvent, CategoryId, SessionRecord } from '../types'
 import { FINISHING_KEYS, GAME_KEYS, GAME_LABELS } from '../types'
 import {
-  GROUP_ORDER, PHASE_LABEL, PLAYER_ACTIONS, byTacticalOrder, groupOf, primaryPosition, SECTORS, TEAM_ACTIONS, activeEvents, actionLabel, clockSeconds, collective, formatClock, isPlayerAction,
+  GROUP_ORDER, PHASE_LABEL, PLAYER_ACTIONS, byTacticalOrder, groupOf, primaryPosition, SECTORS, TEAM_ACTIONS, activeEvents, withDerivedReds, actionLabel, clockSeconds, collective, formatClock, isPlayerAction,
   minuteLabel, minutesPlayed, playerTotals, roundMinutes, sessionTotals, suggestSector,
   type EventKind, type MatchEvent, type Period, type PlayerAction, type Sector, type TeamAction,
 } from '../lib/match'
@@ -63,6 +63,7 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
   })
   const [rosterAll, setRosterAll] = useState(false)
   const [subOut, setSubOut] = useState('')
+  const [cardAthlete, setCardAthlete] = useState('')
   const [subIn, setSubIn] = useState('')
   const [historyOpen, setHistoryOpen] = useState(true)
   const [flash, setFlash] = useState('')
@@ -376,9 +377,40 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
     setToast('Você comanda o jogo')
   }
 
+  /* ---------- disciplina ---------- */
+  const cards = useMemo(() => {
+    const map = new Map<string, { yellow: number; red: boolean }>()
+    for (const e of activeEvents(withDerivedReds(events))) {
+      if (!e.athleteId) continue
+      const c = map.get(e.athleteId) ?? { yellow: 0, red: false }
+      if (e.kind === 'cartao_amarelo') c.yellow += 1
+      if (e.kind === 'cartao_vermelho' || e.kind === 'cartao_vermelho_2o_amarelo') c.red = true
+      map.set(e.athleteId, c)
+    }
+    return map
+  }, [events])
+
+  function giveCard(kind: 'cartao_amarelo' | 'cartao_vermelho' | 'impedimento', athleteId: string | null) {
+    if (!match || !canRecord) return
+    if (athleteId && cards.get(athleteId)?.red) { setToast('Atleta já expulso.'); return }
+    const at = stamp()
+    if (!record(kind, athleteId, at)) return
+    const secondYellow = kind === 'cartao_amarelo' && athleteId !== null && (cards.get(athleteId)?.yellow ?? 0) === 1
+    const expelled = athleteId !== null && (kind === 'cartao_vermelho' || secondYellow)
+    if (expelled && athleteId) {
+      const next = players.map((p) => (p.athleteId === athleteId ? { ...p, onField: false } : p))
+      setPlayers(next)
+      safely(() => saveLineup(match.id, teamId, next.filter((p) => p.athleteId === athleteId), serverIso()))
+    }
+    const who = athleteId ? nameOf(athleteId) : 'sem atleta'
+    setToast(`${minuteLabel(at.period, at.clockSeconds)} · ${secondYellow ? '2º amarelo, expulso: ' : kind === 'cartao_vermelho' ? 'vermelho: ' : kind === 'cartao_amarelo' ? 'amarelo: ' : 'impedimento: '}${who}`)
+    setCardAthlete('')
+  }
+
   /* ---------- substituição ---------- */
   function substitute(outId: string, inId: string) {
     if (!match) return
+    if (cards.get(outId)?.red || cards.get(inId)?.red) { setToast('Atleta expulso não participa de substituição.'); return }
     const at = stamp()
     if (!record('sub_out', outId, at) || !record('sub_in', inId, at)) return
     const next = players.map((p) => (p.athleteId === outId ? { ...p, onField: false } : p.athleteId === inId ? { ...p, onField: true } : p))
@@ -624,11 +656,25 @@ export function LiveMatch({ teamId, clubName, category, event, athletes, user, r
             </section>
 
             {isCommander && match.status !== 'finished' && (
+              <section className="panel order-discipline" aria-label="Disciplina">
+                <div className="panel-head"><strong>Disciplina</strong><small>{match.phase === 'pre' ? 'depois do início' : minuteLabel(stamp().period, stamp().clockSeconds)}</small></div>
+                <label><span>Atleta</span><select className="chip-select" value={cardAthlete} onChange={(e) => setCardAthlete(e.target.value)}><option value="">Selecione</option>{[...onField].sort(byTacticalOrder).map((p) => <option key={p.athleteId} value={p.athleteId}>{p.number ? `${p.number} · ` : ''}{p.athleteName}{(cards.get(p.athleteId)?.yellow ?? 0) > 0 ? ' 🟨' : ''}</option>)}</select></label>
+                <div className="discipline-actions">
+                  <button className="secondary-button" disabled={!cardAthlete || match.phase === 'pre' || !canRecord} onClick={() => giveCard('cartao_amarelo', cardAthlete)} type="button">Amarelo</button>
+                  <button className="secondary-button" disabled={!cardAthlete || match.phase === 'pre' || !canRecord} onClick={() => giveCard('cartao_vermelho', cardAthlete)} type="button">Vermelho</button>
+                  <button className="secondary-button" disabled={!cardAthlete || match.phase === 'pre' || !canRecord} onClick={() => giveCard('impedimento', cardAthlete)} type="button">Impedimento</button>
+                  <button className="secondary-button" disabled={match.phase === 'pre' || !canRecord} onClick={() => giveCard('impedimento', null)} type="button">Impedimento (sem atleta)</button>
+                </div>
+                <p className="live-muted">2º amarelo do mesmo atleta vira vermelho sozinho. Atleta expulso sai de campo e não volta.</p>
+              </section>
+            )}
+
+            {isCommander && match.status !== 'finished' && (
               <section className="panel order-subs" aria-label="Substituições">
                 <div className="panel-head"><strong>Substituições</strong><small>{match.phase === 'pre' ? 'depois do início' : minuteLabel(stamp().period, stamp().clockSeconds)}</small><button className="secondary-button compact" onClick={() => setView('lineup')} type="button"><Users size={14} /> Relação</button></div>
                 <div className="sub-inline">
                   <label><span>Sai do campo</span><select className="chip-select" value={subOut} onChange={(e) => setSubOut(e.target.value)}><option value="">Selecione</option>{[...onField].sort(byTacticalOrder).map((p) => <option key={p.athleteId} value={p.athleteId}>{p.number ? `${p.number} · ` : ''}{p.athleteName}</option>)}</select></label>
-                  <label><span>Entra em campo</span><select className="chip-select" value={subIn} onChange={(e) => setSubIn(e.target.value)}><option value="">Selecione</option>{players.filter((p) => !p.onField).sort(byTacticalOrder).map((p) => <option key={p.athleteId} value={p.athleteId}>{p.number ? `${p.number} · ` : ''}{p.athleteName}</option>)}</select></label>
+                  <label><span>Entra em campo</span><select className="chip-select" value={subIn} onChange={(e) => setSubIn(e.target.value)}><option value="">Selecione</option>{players.filter((p) => !p.onField && !cards.get(p.athleteId)?.red).sort(byTacticalOrder).map((p) => <option key={p.athleteId} value={p.athleteId}>{p.number ? `${p.number} · ` : ''}{p.athleteName}</option>)}</select></label>
                 </div>
                 <button className="primary-button full-button" disabled={!subOut || !subIn || match.phase === 'pre'} onClick={() => { substitute(subOut, subIn); setSubOut(''); setSubIn('') }} type="button"><ArrowLeftRight size={16} /> Registrar substituição</button>
               </section>

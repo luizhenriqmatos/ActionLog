@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  clockSeconds, collective, formatClock, minuteLabel, minutesPlayed, onFieldFromEvents, playerTotals, sessionTotals, suggestSector,
+  clockSeconds, collective, formatClock, minuteLabel, minutesPlayed, onFieldFromEvents, withDerivedReds, playerTotals, sessionTotals, suggestSector,
   type EventKind, type MatchEvent, type Period,
 } from './match.ts'
 
@@ -187,4 +187,16 @@ test('minutos: expulso não volta por uma entrada atrasada; prorrogação soma d
   const events = [...full(45, 45), evt('r', 'cartao_vermelho', 'T', 1, 20, 1), evt('x', 'sub_in', 'T', 2, 10, 2), evt('p3', 'period_start', null, 3, 0), evt('p3e', 'period_end', null, 3, 15)]
   assert.equal((minutesPlayed(lineupOf(['T', 'U'], ['T', 'U']), events).get('T') as number) / 60, 20)
   assert.equal((minutesPlayed(lineupOf(['U'], ['U']), events).get('U') as number) / 60, 105)
+})
+
+test('2º amarelo do mesmo atleta gera 1 vermelho derivado no mesmo minuto; não duplica se o servidor já mandou', () => {
+  const y = [evt('y1', 'cartao_amarelo', 'T', 1, 10, 1), evt('y2', 'cartao_amarelo', 'T', 1, 30, 2), evt('y3', 'cartao_amarelo', 'U', 1, 31, 3)]
+  const out = withDerivedReds(y).filter((e) => e.kind === 'cartao_vermelho_2o_amarelo')
+  assert.equal(out.length, 1)
+  assert.equal(out[0].athleteId, 'T')
+  assert.equal(out[0].clockSeconds, 30 * 60)
+  const withServer = [...y, evt('r', 'cartao_vermelho_2o_amarelo', 'T', 1, 30, 4)]
+  assert.equal(withDerivedReds(withServer).filter((e) => e.kind === 'cartao_vermelho_2o_amarelo').length, 1)
+  const m = minutesPlayed(lineupOf(['T'], ['T']), [...full(45, 45), y[0], y[1]])
+  assert.equal((m.get('T') as number) / 60, 30)
 })

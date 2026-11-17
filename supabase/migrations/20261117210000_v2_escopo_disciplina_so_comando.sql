@@ -1,0 +1,1 @@
+-- Aplicada via Supabase como v2_escopo_disciplina_so_comando: cartões e impedimento só o comando registra; vermelho derivado passa direto.

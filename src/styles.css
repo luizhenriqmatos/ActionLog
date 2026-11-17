@@ -793,3 +793,6 @@ button.live-clock{border:0;color:var(--ink);cursor:pointer}
 .tray-name{display:flex;flex-direction:column;min-width:0}
 .tray-name small{color:var(--muted);font-size:11px}
 .board-check{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--ink-2)}.board-check input{margin-top:3px;width:18px;height:18px}
+
+.order-discipline { display: grid; gap: 8px; }
+.discipline-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
