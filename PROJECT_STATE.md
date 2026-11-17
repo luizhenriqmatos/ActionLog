@@ -212,5 +212,5 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - Limitação: filtro de jogo-treino só funciona em clube com partida espelhada (flag partida_v2).
 
 ## Fase 5.2 (parcial)
-- Views v_athlete_totals e v_scout_session_rates removidas (nenhuma dependência, nenhuma leitura no app).
+- Views v_athlete_totals e v_scout_session_rates: remoção NÃO aplicada (o servidor pediu confirmação do DROP e ficou sem resposta). As views continuam no banco. Sem dependências e sem leitura no app; aplicar só com confirmação do Luiz.
 - PENDENTE 5.2: agregado por participante_id a partir dos eventos e teste de reprodutibilidade do snapshot.
