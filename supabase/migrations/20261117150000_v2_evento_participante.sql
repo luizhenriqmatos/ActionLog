@@ -1,0 +1,7 @@
+-- ScoutHouse v2 · Fase 3.4 (EXPAND) · match_events.participante_id.
+-- Aplicada em produção como `v2_evento_participante_fase_3_4`. Coluna anulável + FK para partida_participante;
+-- backfill: os 854 eventos existentes pertencem ao lado interno (mandante/categoria_interna) da sua partida;
+-- trigger BEFORE INSERT preenche o lado interno quando o cliente (antigo) não manda, e recusa lado de outra partida;
+-- private.match_event_immutable passa a proibir mudar o lado depois de definido.
+-- NOT NULL (rejeitar nulo) fica para a fase de contract, depois da dupla escrita: cliente antigo ainda insere sem o campo,
+-- e clube com a flag partida_v2 desligada não tem partida espelhada (lado nulo até a reconciliação).

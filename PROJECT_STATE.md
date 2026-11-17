@@ -176,3 +176,8 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - `periodo_partida` derivada dos eventos `period_start`/`period_end`: 11 períodos de 8 jogos, igual ao esperado; 8 de 8 fins com o `clock_seconds` real (acréscimo preservado, ex.: 2946 s).
 - Trigger de espelho só para clubes com `partida_v2` ligada; desfazer o evento remove o período. Testado no banco (acréscimo de 95 s, desfazer fim).
 - Prorrogação continua impossível (CHECK `period in (1,2)`): cai na Fase 4.3.
+
+## v2 — Fase 3.4 · lado do evento · 17/11/2026 (EXPAND)
+- `match_events.participante_id`: 854 de 854 eventos no lado interno; nenhum de outra partida. Tipos como `opponent_goal` mantêm o `kind`; o lado é o interno.
+- Trigger preenche o lado para cliente antigo e recusa lado de outra partida; lado definido não muda. Testado (inclui a regra D-L, que continua valendo).
+- Pendente: NOT NULL (contract, após a dupla escrita 3.5) e trocar as somas do app de `match_id` para `participante_id` (leitura nova, atrás da flag).
