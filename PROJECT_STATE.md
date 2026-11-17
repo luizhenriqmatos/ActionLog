@@ -202,3 +202,4 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - PENDENTE: UI de cartões/impedimento no jogo ao vivo; gravar escalacao a partir de match_players; decidir remoção real em removeFromLineup; backfill de substituicao.
 - UI disciplina no LiveMatch (painel só para o comando): amarelo, vermelho, impedimento (com ou sem atleta). 2º amarelo expulsa na hora na tela (withDerivedReds) e o servidor cria o vermelho derivado. Expulso sai de campo e some da lista de entradas. match_event_escopo: disciplina = só comando.
 - Não verificado em produção na tela real.
+- Escalação: arrastar e soltar (mouse e toque pela bolinha), campo ao lado da lista no computador, barra Salvar sem flutuar sobre a lista; toque continua como alternativa. Testado em harness headless (desktop e 390px).

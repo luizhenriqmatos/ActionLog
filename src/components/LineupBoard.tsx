@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Shirt, Sparkles, X } from 'lucide-react'
 import type { Athlete } from '../types'
 import { byTacticalOrder, suggestSector, type Sector } from '../lib/match'
@@ -49,6 +49,10 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
   const [selected, setSelected] = useState<string | null>(null)
   const [savePositions, setSavePositions] = useState(true)
   const [lastMsg, setLastMsg] = useState('')
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [hoverSlot, setHoverSlot] = useState<string | null>(null)
+  const dragRef = useRef<{ id: string; sx: number; sy: number; active: boolean; pointer: number } | null>(null)
+  const justDragged = useRef(false)
 
   const byId = useMemo(() => new Map(athletes.map((a) => [a.id, a])), [athletes])
   const formation = formationById(formationId)
@@ -61,7 +65,7 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
   const selectedOnPitch = selected ? onPitch.has(selected) : false
 
   function tapSlot(slotId: string) {
-    if (started) return
+    if (started || justDragged.current) return
     const occupant = assign[slotId]
     if (selected) {
       setAssign((current) => assignToSlot(current, slotId, selected))
@@ -97,6 +101,46 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
   function setBenchState(id: string, state: 'reserve' | 'out') { setBench((m) => new Map(m).set(id, state)); setSelected(null) }
   function takeOff(id: string) { setAssign((current) => removeFromSlots(current, id)); setBench((m) => new Map(m).set(id, 'reserve')); setSelected(null) }
 
+  /** Arrastar: mouse em qualquer lugar do atleta; no toque, só pela bolinha/número (o resto continua rolando a tela). */
+  function startDrag(e: React.PointerEvent, id: string) {
+    if (started || e.button > 0) return
+    if (e.pointerType === 'touch' && !(e.target as HTMLElement).closest('[data-handle]')) return
+    dragRef.current = { id, sx: e.clientX, sy: e.clientY, active: false, pointer: e.pointerId }
+  }
+  const slotAt = (x: number, y: number) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>('[data-slot]')?.dataset.slot ?? null
+  const overTray = (x: number, y: number) => Boolean((document.elementFromPoint(x, y) as HTMLElement | null)?.closest('[data-tray]'))
+  useEffect(() => {
+    function move(e: PointerEvent) {
+      const d = dragRef.current
+      if (!d || e.pointerId !== d.pointer) return
+      if (!d.active && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 8) return
+      d.active = true
+      e.preventDefault()
+      setSelected(null)
+      setDrag({ id: d.id, x: e.clientX, y: e.clientY })
+      setHoverSlot(slotAt(e.clientX, e.clientY))
+    }
+    function up(e: PointerEvent) {
+      const d = dragRef.current
+      if (!d || e.pointerId !== d.pointer) return
+      dragRef.current = null
+      if (!d.active) return
+      justDragged.current = true
+      window.setTimeout(() => { justDragged.current = false }, 0)
+      const slot = slotAt(e.clientX, e.clientY)
+      if (slot) setAssign((cur) => assignToSlot(cur, slot, d.id))
+      else if (overTray(e.clientX, e.clientY)) { setAssign((cur) => removeFromSlots(cur, d.id)); setBench((m) => new Map(m).set(d.id, 'reserve')) }
+      setDrag(null)
+      setHoverSlot(null)
+    }
+    function cancel() { dragRef.current = null; setDrag(null); setHoverSlot(null) }
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancel) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function save() {
     const picks = new Map<string, LineupPick>()
     for (const a of athletes) {
@@ -127,6 +171,7 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
       </div>
       {athletes.length === 0 && <p className="live-muted">Cadastre atletas no Elenco desta categoria primeiro.</p>}
 
+      <div className="board-layout">
       <div className="pitch" role="group" aria-label={`Campo, formação ${formation.label}`}>
         <i className="pitch-box top" /><i className="pitch-box bottom" /><i className="pitch-circle" />
         {formation.slots.map((slot) => {
@@ -134,13 +179,14 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
           const isSel = !!athlete && selected === athlete.id
           return (
             <button
-              key={slot.id} type="button" disabled={started}
-              className={`slot ${athlete ? 'filled' : 'empty'} ${isSel ? 'selected' : ''} ${selected && !isSel ? 'target' : ''}`}
+              key={slot.id} type="button" disabled={started} data-slot={slot.id}
+              onPointerDown={athlete ? (e) => startDrag(e, athlete.id) : undefined}
+              className={`slot ${athlete ? 'filled' : 'empty'} ${isSel ? 'selected' : ''} ${selected && !isSel ? 'target' : ''} ${hoverSlot === slot.id ? 'hover' : ''} ${drag && athlete?.id === drag.id ? 'dragging' : ''}`}
               style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
               onClick={() => tapSlot(slot.id)}
               aria-label={athlete ? `${slotLabel(slot.id)}: ${athlete.name}` : `${slotLabel(slot.id)}: vazio`}
             >
-              <span className="slot-dot">{athlete ? (athlete.number || firstName(athlete.name).slice(0, 1)) : '+'}</span>
+              <span className="slot-dot" data-handle>{athlete ? (athlete.number || firstName(athlete.name).slice(0, 1)) : '+'}</span>
               <span className="slot-name">{athlete ? firstName(athlete.name) : slot.code}</span>
               {athlete && <small className="slot-code">{slot.code}</small>}
             </button>
@@ -148,6 +194,7 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
         })}
       </div>
 
+      <div className="board-side">
       {selectedAthlete ? (
         <div className="board-bar" role="status">
           <span><strong>{selectedAthlete.name}</strong>{selectedOnPitch ? ' · toque em outro lugar para trocar' : ' · toque num lugar do campo'}</span>
@@ -161,22 +208,26 @@ export function LineupBoard({ athletes, players, started, onSave, onCancel, load
           <button className="icon-button" onClick={() => setSelected(null)} type="button" aria-label="Cancelar seleção"><X size={14} /></button>
         </div>
       ) : (
-        <p className="board-hint">{started ? 'Titulares não mudam com o jogo rolando. Use as substituições.' : 'Toque num atleta da lista e depois no lugar dele no campo. Toque num titular para trocar de lugar.'}</p>
+        <p className="board-hint">{started ? 'Titulares não mudam com o jogo rolando. Use as substituições.' : 'Arraste o atleta da lista para o lugar dele no campo. Arraste um titular para outro lugar para trocar, ou de volta para a lista para tirar. Se preferir, toque no atleta e depois no lugar.'}</p>
       )}
 
       {lastMsg && <p className="board-hint" role="status">{lastMsg}</p>}
       {missingPosition > 0 && !started && <label className="board-check"><input type="checkbox" checked={savePositions} onChange={(e) => setSavePositions(e.target.checked)} /> Gravar a posição escolhida na ficha de {missingPosition} atleta{missingPosition > 1 ? 's' : ''} sem posição</label>}
-      <ul className="board-tray" aria-label="Elenco fora do campo">
+      <ul className="board-tray" data-tray aria-label="Elenco fora do campo">
         {tray.map((a) => (
           <li key={a.id}>
-            <button type="button" className={`tray-chip ${selected === a.id ? 'selected' : ''} ${bench.get(a.id) === 'out' ? 'out' : ''}`} onClick={() => setSelected(selected === a.id ? null : a.id)}>
-              <span className="live-number">{a.number || '—'}</span>
+            <button type="button" className={`tray-chip ${selected === a.id ? 'selected' : ''} ${bench.get(a.id) === 'out' ? 'out' : ''} ${drag?.id === a.id ? 'dragging' : ''}`} onPointerDown={(e) => startDrag(e, a.id)} onClick={() => { if (!justDragged.current) setSelected(selected === a.id ? null : a.id) }}>
+              <span className="live-number" data-handle>{a.number || '—'}</span>
               <span className="tray-name"><strong>{a.name}</strong><small>{a.positions || 'sem posição'} · {bench.get(a.id) === 'out' ? 'fora' : 'banco'}</small></span>
             </button>
           </li>
         ))}
         {tray.length === 0 && athletes.length > 0 && <li className="live-muted">Todo o elenco está em campo.</li>}
       </ul>
+
+      </div>
+      </div>
+      {drag && byId.get(drag.id) && <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}><span className="slot-dot">{byId.get(drag.id)?.number || firstName(byId.get(drag.id)?.name ?? '').slice(0, 1)}</span><span className="slot-name">{firstName(byId.get(drag.id)?.name ?? '')}</span></div>}
 
       <div className="lineup-actions">
         {players.length > 0 && <button className="secondary-button" onClick={onCancel} type="button">Cancelar</button>}

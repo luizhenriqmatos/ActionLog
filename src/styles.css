@@ -796,3 +796,30 @@ button.live-clock{border:0;color:var(--ink);cursor:pointer}
 
 .order-discipline { display: grid; gap: 8px; }
 .discipline-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+/* escalação: arrastar e soltar, campo ao lado da lista no computador */
+.board-layout{display:grid;gap:12px}
+.board-side{display:flex;flex-direction:column;gap:10px;min-width:0}
+.pitch{max-height:calc(100vh - 220px);max-width:min(460px,calc((100vh - 220px) * .68))}
+.slot,.tray-chip{user-select:none;-webkit-user-select:none}
+.slot.filled{cursor:grab}.slot.filled .slot-dot{touch-action:none}
+.tray-chip{cursor:grab}.tray-chip .live-number{touch-action:none}
+.slot.dragging,.tray-chip.dragging{opacity:.35}
+.slot.hover .slot-dot{background:var(--green);border-style:solid;border-color:#fff;transform:scale(1.15)}
+.drag-ghost{position:fixed;z-index:50;transform:translate(-50%,-70%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px;color:#fff}
+.drag-ghost .slot-dot{background:var(--blue);color:var(--on-accent);border:2px solid #fff;box-shadow:0 8px 20px rgba(0,0,0,.5)}
+.drag-ghost .slot-name{text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.board-tray{max-height:calc(100vh - 260px);overflow-y:auto;overscroll-behavior:contain}
+.lineup-actions{position:static;background:none;padding:0;backdrop-filter:none}
+@media (min-width:900px){
+  .board-layout{grid-template-columns:minmax(300px,460px) minmax(0,1fr);align-items:start}
+  .board-layout .pitch{margin:0}
+  .board-tray{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+}
+@media (max-width:899px){
+  .board-tray{display:flex;gap:8px;max-height:none;overflow-x:auto;overflow-y:hidden;padding-bottom:6px}
+  .board-tray>li{flex:0 0 200px}
+  .pitch{width:auto;height:min(50vh,520px);max-height:none;max-width:100%}
+  .lineup-actions{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom));background:var(--bg,#131316);padding:8px;border-radius:20px;border:1px solid var(--line);z-index:5}
+}
+.board,.board *{-webkit-user-select:none;user-select:none}
