@@ -1,0 +1,8 @@
+-- Fase 5.2: agregado por participante + fechamento congelado. APLICADA no banco (registro: v2_agregado_por_participante_fase_5_2).
+-- Todo número de equipe é calculado A FAVOR de um participante; "contra" é o "a favor" do outro.
+-- lados_registrados='um': opponent_goal/corner_against são a favor do outro participante.
+-- lados_registrados='dois': esses tipos são ignorados (cada lado registra o seu; sem contagem dupla).
+-- Objetos: public.partida_agregado(uuid, timestamptz), public.partida_fechamento (imutável, RLS só leitura),
+-- private.fechar_partida_agregado, trigger private.partida_ao_encerrar, public.verificar_fechamento(uuid).
+-- Partidas já encerradas receberam snapshot retroativo (retroativo=true), pois fechada_em era nulo.
+-- O SQL completo está no registro de migrations do Supabase.

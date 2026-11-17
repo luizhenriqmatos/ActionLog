@@ -211,9 +211,14 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - Não feito: exportar imagem (PDF via impressão); relatório de partida interna com as duas categorias; hash do conteúdo só confere no servidor.
 - Limitação: filtro de jogo-treino só funciona em clube com partida espelhada (flag partida_v2).
 
-## Fase 5.2 (parcial)
-- Views v_athlete_totals e v_scout_session_rates: remoção NÃO aplicada (o servidor pediu confirmação do DROP e ficou sem resposta). As views continuam no banco. Sem dependências e sem leitura no app; aplicar só com confirmação do Luiz.
-- PENDENTE 5.2: agregado por participante_id a partir dos eventos e teste de reprodutibilidade do snapshot.
+## Fase 5.2 (concluída)
+- Views v_athlete_totals e v_scout_session_rates: REMOVIDAS (o Luiz rodou o DROP manualmente no editor do Supabase; confirmado 0 views).
+- Agregado por participante: public.partida_agregado(partida, ate) — "contra" = "a favor" do outro; lados_registrados 'um' usa opponent_goal/corner_against como a favor do outro, 'dois' os ignora (sem contagem dupla); só status confirmado.
+- Fechamento congelado: partida_fechamento (imutável, só leitura), gerado por trigger ao virar 'encerrada' (private.fechar_partida_agregado). As 4 partidas já encerradas receberam snapshot retroativo (retroativo=true; fechada_em era nulo, valeu o horário da geração).
+- Conferência: public.verificar_fechamento(partida) recalcula até o fechamento e compara com o congelado (ok + eventos_tardios). Testado com rollback: lado único, dois lados, snapshot reproduzível, evento tardio e anulação posterior não mexem no congelado, snapshot não edita. As 4 retroativas reproduzem.
+- TS: src/lib/participantes.ts (+ teste, 5 casos) espelha a função SQL. Ainda não usado em tela.
+- Nota de teste: dentro de uma transação now() é único; o teste desliga o trigger de carimbo (rollback) para simular horários.
+- Pendente: usar o agregado no relatório/painel; partida interna (dois participantes internos) sem UI.
 
 ## Fase 5.3 (tema)
 - Tokens conferidos no canvas 4oWrYu3nmTVNGAu974dBSH (Painel.dc.html): batem com o documento; bug do escuro circular confirmado e NÃO replicado (valores escuros reais, todos AA sobre #0b0b0b: azul #6fb0dc, verde #5fbf6e, rosa #e07aa8, âmbar #e0a44a, vermelho #f0786b).
