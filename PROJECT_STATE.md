@@ -210,3 +210,7 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - Decisões tomadas sem resposta explícita: emitir sem responsável é permitido com aviso gravado; link público com código de 192 bits, 30 dias, revogável; sem conexão não entrega (log obrigatório).
 - Não feito: exportar imagem (PDF via impressão); relatório de partida interna com as duas categorias; hash do conteúdo só confere no servidor.
 - Limitação: filtro de jogo-treino só funciona em clube com partida espelhada (flag partida_v2).
+
+## Fase 5.2 (parcial)
+- Views v_athlete_totals e v_scout_session_rates removidas (nenhuma dependência, nenhuma leitura no app).
+- PENDENTE 5.2: agregado por participante_id a partir dos eventos e teste de reprodutibilidade do snapshot.

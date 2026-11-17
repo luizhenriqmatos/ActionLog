@@ -1,0 +1,3 @@
+-- Recriar as duas views (security_invoker=true) com as definições de
+-- 20261106120000_actionlog_core.sql e 20261109120000_live_match.sql (esta última inclui minutes_played / match_id).
+-- Nenhuma linha do app as lia; reverter só devolve objetos sem uso.
