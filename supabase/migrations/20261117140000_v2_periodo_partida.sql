@@ -1,0 +1,6 @@
+-- ScoutHouse v2 · Fase 3.3 (EXPAND) · periodo_partida, derivado dos eventos period_start/period_end.
+-- Aplicada em produção como `v2_periodo_partida_fase_3_3`. Tabela periodo_partida(partida_id, ordem, rotulo,
+-- iniciado_em_servidor, encerrado_em_servidor, duracao_observada_s, pausas[]), função private.recalcular_periodos(match)
+-- (idempotente, usada no backfill e no trigger match_events_periodos, que só age para clubes com a flag partida_v2 ligada).
+-- duracao_observada_s = clock_seconds REAL do period_end (o acréscimo entra). Não trocar por duração regulamentar.
+-- O CHECK period in (1,2) de matches/match_events continua: prorrogação só vira possível na Fase 4.3.

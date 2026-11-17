@@ -171,3 +171,8 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - `calendar_events.inicio_previsto` (timestamptz) + `hora_presumida`: 17 de 17 conferidos data a data (12:00 de Bahia). Trigger mantém o instante junto da `date` enquanto a hora é presumida; hora real nunca é sobrescrita. Testado no banco.
 - Falta na 3.2: campo de hora no app e aviso de sobreposição (sem bloquear). Só faz sentido depois que o app gravar a hora.
 - 3.2 no app: campo **Hora (opcional)** no compromisso (`CalendarEvent.time`, HH:MM da Bahia), enviado como `inicio_previsto` + `hora_presumida=false`; sem hora volta a 12:00 presumido. Aviso de sobreposição (duração suposta de 2 h, só avisa). Risco conhecido: aparelho com versão antiga que mudar a DATA de um compromisso com hora real deixa a hora no dia antigo; resolve com trava de versão mínima do cliente (3.5).
+
+## v2 — Fase 3.3 · periodo_partida · 17/11/2026 (EXPAND)
+- `periodo_partida` derivada dos eventos `period_start`/`period_end`: 11 períodos de 8 jogos, igual ao esperado; 8 de 8 fins com o `clock_seconds` real (acréscimo preservado, ex.: 2946 s).
+- Trigger de espelho só para clubes com `partida_v2` ligada; desfazer o evento remove o período. Testado no banco (acréscimo de 95 s, desfazer fim).
+- Prorrogação continua impossível (CHECK `period in (1,2)`): cai na Fase 4.3.
