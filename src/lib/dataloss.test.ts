@@ -275,3 +275,19 @@ test('D-L: atleta de setor com dono só é registrado pelo dono; setor sem dono 
   assert.equal(sectorOwnerFor(owners, 'DEF', 'ana'), null)
   assert.equal(sectorOwnerFor(owners, 'ATA', 'bia'), null)
 })
+
+test('hora do compromisso: instante da Bahia, ida e volta, e sobreposição só avisa', async () => {
+  const { eventInstant, timeFromInstant, overlappingEvents, isValidTime } = await import('./calendar.ts')
+  assert.equal(eventInstant('2026-11-18', '15:30'), '2026-11-18T15:30:00-03:00')
+  assert.equal(eventInstant('2026-11-18', ''), null)
+  assert.equal(eventInstant('2026-11-18', '25:00'), null)
+  assert.equal(isValidTime('09:05'), true)
+  assert.equal(timeFromInstant('2026-11-18T15:30:00-03:00'), '15:30')
+  assert.equal(timeFromInstant('2026-11-18T00:10:00-03:00'), '00:10')
+  const base = { type: 'Jogo' as const, title: 'A', opponent: '', location: '', mdTag: 'MD' }
+  const events = [{ ...base, id: 'a', date: '2026-11-18', time: '15:00' }, { ...base, id: 'b', date: '2026-11-18' }, { ...base, id: 'c', date: '2026-11-19', time: '15:00' }]
+  assert.equal(overlappingEvents(events, { id: 'n', date: '2026-11-18', time: '16:30' }).length, 1)
+  assert.equal(overlappingEvents(events, { id: 'n', date: '2026-11-18', time: '17:00' }).length, 0)
+  assert.equal(overlappingEvents(events, { id: 'n', date: '2026-11-18' }).length, 0)
+  assert.equal(overlappingEvents(events, { id: 'a', date: '2026-11-18', time: '15:00' }).length, 0)
+})

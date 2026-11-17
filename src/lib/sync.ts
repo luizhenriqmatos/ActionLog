@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { eventInstant, isValidTime, timeFromInstant } from './calendar.ts'
 import type { AppData, Athlete, CalendarEvent, CategoryId, Evaluation, Foot, SessionRecord } from '../types'
 import { CATEGORIES } from '../types/index.ts'
 import { fetchAll } from './paging.ts'
@@ -33,6 +34,8 @@ export function eventRow(teamId: string, category: CategoryId, e: CalendarEvent)
   return {
     team_id: teamId, id: e.id, category, type: e.type, title: e.title, date: e.date, opponent: e.opponent,
     location: e.location, md_tag: e.mdTag, updated_at: e.updatedAt ?? '1970-01-01T00:00:00.000Z', deleted_at: null,
+    // hora real vai como instante; sem hora, o servidor presume 12:00 (Bahia) e acompanha a data
+    inicio_previsto: eventInstant(e.date, e.time), hora_presumida: !isValidTime(e.time),
   }
 }
 
@@ -72,7 +75,7 @@ export function rowAthlete(r: Row): Athlete {
 }
 
 export function rowEvent(r: Row): CalendarEvent {
-  return { id: str(r.id), type: r.type === 'Jogo' ? 'Jogo' : 'Treino', title: str(r.title), date: str(r.date).slice(0, 10), opponent: str(r.opponent), location: str(r.location), mdTag: str(r.md_tag), updatedAt: new Date(time(r.updated_at)).toISOString() }
+  return { id: str(r.id), type: r.type === 'Jogo' ? 'Jogo' : 'Treino', title: str(r.title), date: str(r.date).slice(0, 10), opponent: str(r.opponent), location: str(r.location), mdTag: str(r.md_tag), ...(r.hora_presumida === false && r.inicio_previsto ? { time: timeFromInstant(str(r.inicio_previsto)) } : {}), updatedAt: new Date(time(r.updated_at)).toISOString() }
 }
 
 export function rowSession(r: Row): SessionRecord {

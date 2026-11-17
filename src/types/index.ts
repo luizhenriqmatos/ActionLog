@@ -58,6 +58,8 @@ export type CalendarEvent = {
   opponent: string
   location: string
   mdTag: string
+  /** Hora real do compromisso (HH:MM, horário da Bahia). Ausente = hora presumida. */
+  time?: string
   updatedAt?: string
 }
 
