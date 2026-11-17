@@ -6,14 +6,18 @@ import type { GameMetric } from '../types'
 
 export type Sector = 'DEF' | 'MEI' | 'ATA'
 export type Phase = 'pre' | 'first' | 'break' | 'second' | 'done'
-export type Period = 1 | 2
+/** 1 e 2 = tempos regulares; 3 e 4 = prorrogação. */
+export type Period = 1 | 2 | 3 | 4
 
 export type PlayerAction =
   | 'goal' | 'assist' | 'shot' | 'shot_on_target' | 'pass_ok' | 'pass_bad'
   | 'tackle' | 'interception' | 'possession_loss' | 'foul_committed' | 'foul_suffered'
 export type TeamAction = 'corner_for' | 'corner_against' | 'opponent_goal'
 export type SystemAction = 'sub_out' | 'sub_in' | 'period_start' | 'period_end'
-export type EventKind = PlayerAction | TeamAction | SystemAction
+/** Disciplina. O vermelho do 2º amarelo é gerado pelo servidor; nunca se registra à mão. */
+export type DisciplineAction = 'cartao_amarelo' | 'cartao_vermelho' | 'cartao_vermelho_2o_amarelo' | 'impedimento'
+export const RED_CARDS: ReadonlyArray<EventKind> = ['cartao_vermelho', 'cartao_vermelho_2o_amarelo']
+export type EventKind = PlayerAction | TeamAction | SystemAction | DisciplineAction
 
 export type MatchEvent = {
   id: string
@@ -81,6 +85,7 @@ const ACTION_LABEL: Record<EventKind, string> = {
   ...Object.fromEntries(PLAYER_ACTIONS.map((a) => [a.kind, a.label])),
   ...Object.fromEntries(TEAM_ACTIONS.map((a) => [a.kind, a.label])),
   sub_out: 'Saiu', sub_in: 'Entrou', period_start: 'Início do período', period_end: 'Fim do período',
+  cartao_amarelo: 'Cartão amarelo', cartao_vermelho: 'Cartão vermelho', cartao_vermelho_2o_amarelo: 'Vermelho (2º amarelo)', impedimento: 'Impedimento',
 } as Record<EventKind, string>
 export const actionLabel = (kind: EventKind) => ACTION_LABEL[kind] ?? kind
 
@@ -190,7 +195,7 @@ export function formatClock(seconds: number) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 }
 
-export const periodLabel = (period: Period) => (period === 1 ? '1ºT' : '2ºT')
+export const periodLabel = (period: Period) => (['1ºT', '2ºT', '1ºP', '2ºP'][period - 1] ?? '1ºT')
 export const PHASE_LABEL: Record<Phase, string> = { pre: 'Antes do jogo', first: '1º tempo', break: 'Intervalo', second: '2º tempo', done: 'Encerrado' }
 
 /** "1ºT 12'" — minuto de jogo como no futebol (0:00–0:59 = 1'). */
@@ -259,7 +264,8 @@ export function minutesPlayed(
   const result = new Map<string, number>()
   let onField = new Set(lineup.filter((p) => p.starter).map((p) => p.athleteId))
 
-  for (const period of [1, 2] as Period[]) {
+  const expelled = new Set<string>()
+  for (const period of [1, 2, 3, 4] as Period[]) {
     const ends = active.filter((e) => e.kind === 'period_end' && e.period === period)
     const starts = active.filter((e) => e.kind === 'period_start' && e.period === period)
     let length: number | null = ends.length ? Math.max(...ends.map((e) => e.clockSeconds)) : null
@@ -270,8 +276,9 @@ export function minutesPlayed(
       length = 0
     }
 
+    // vermelho (direto ou do 2º amarelo) encerra a participação do atleta naquele minuto, como uma saída
     const subs = active
-      .filter((e) => (e.kind === 'sub_in' || e.kind === 'sub_out') && e.period === period && e.athleteId)
+      .filter((e) => (e.kind === 'sub_in' || e.kind === 'sub_out' || RED_CARDS.includes(e.kind)) && e.period === period && e.athleteId)
       .sort((a, b) => a.clockSeconds - b.clockSeconds || a.createdAt.localeCompare(b.createdAt))
 
     const enteredAt = new Map<string, number>()
@@ -279,7 +286,9 @@ export function minutesPlayed(
     for (const sub of subs) {
       const t = Math.min(Math.max(sub.clockSeconds, 0), length)
       const id = sub.athleteId as string
-      if (sub.kind === 'sub_out' && enteredAt.has(id)) {
+      if (expelled.has(id)) continue
+      if (RED_CARDS.includes(sub.kind)) expelled.add(id)
+      if ((sub.kind === 'sub_out' || RED_CARDS.includes(sub.kind)) && enteredAt.has(id)) {
         result.set(id, (result.get(id) ?? 0) + (t - (enteredAt.get(id) as number)))
         enteredAt.delete(id)
       } else if (sub.kind === 'sub_in' && !enteredAt.has(id)) {
@@ -289,6 +298,8 @@ export function minutesPlayed(
     for (const [id, t] of enteredAt) result.set(id, (result.get(id) ?? 0) + (length - t))
     onField = new Set(enteredAt.keys())
   }
+  // relacionado que não entrou aparece com 0, não ausente
+  for (const p of lineup) if (!result.has(p.athleteId)) result.set(p.athleteId, 0)
   return result
 }
 

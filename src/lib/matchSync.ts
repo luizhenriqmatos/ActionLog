@@ -36,7 +36,7 @@ const REJECTED_KEY = 'actionlog_match_rejected_v1'
 const toMatch = (r: Record<string, unknown>): MatchRow => ({
   id: String(r.id), teamId: String(r.team_id), category: r.category as CategoryId, calendarEventId: String(r.calendar_event_id),
   opponent: String(r.opponent ?? ''), matchDate: String(r.match_date), status: r.status as MatchRow['status'], phase: r.phase as Phase,
-  period: Number(r.period) === 2 ? 2 : 1, clockRunning: Boolean(r.clock_running), clockStartedAt: (r.clock_started_at as string | null) ?? null,
+  period: ([1, 2, 3, 4].includes(Number(r.period)) ? Number(r.period) : 1) as Period, clockRunning: Boolean(r.clock_running), clockStartedAt: (r.clock_started_at as string | null) ?? null,
   clockBaseSeconds: Number(r.clock_base_seconds ?? 0), opponentGoals: Number(r.opponent_goals ?? 0),
   commanderUserId: (r.commander_user_id as string | null) ?? null, commanderName: String(r.commander_name ?? ''),
   sessionsGeneratedAt: (r.sessions_generated_at as string | null) ?? null, updatedAt: String(r.updated_at),

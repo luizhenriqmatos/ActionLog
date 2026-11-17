@@ -153,3 +153,38 @@ test('ordem tática: GOL → LD → ZAG → LE → VOL → MC → MD → ME → 
   ]
   assert.deepEqual([...list].sort(byTacticalOrder).map((a) => a.name), ['Gol', 'LD', 'Zag 3', 'Zag 4', 'LE', 'VOL', 'MC', 'MEI', 'PD', 'PE', 'Atacante 9', 'Sem'])
 })
+
+/* ---------- Fase 4: minutos com substituição, expulsão e prorrogação ---------- */
+import type { MatchEvent } from './match.ts'
+const evt = (id: string, kind: string, athleteId: string | null, period: 1 | 2 | 3 | 4, minute: number, n = 0): MatchEvent => ({
+  id, kind: kind as MatchEvent['kind'], athleteId, period, clockSeconds: Math.round(minute * 60), createdBy: 'u', createdByName: '', createdAt: `2026-01-01T00:00:${String(n).padStart(2, '0')}Z`, deletedAt: null,
+})
+const lineupOf = (ids: string[], starters: string[]) => ids.map((athleteId) => ({ athleteId, starter: starters.includes(athleteId) }))
+const full = (end1: number, end2: number) => [evt('s1', 'period_start', null, 1, 0), evt('e1', 'period_end', null, 1, end1), evt('s2', 'period_start', null, 2, 0), evt('e2', 'period_end', null, 2, end2)]
+
+test('minutos: entra aos 60 e sai aos 75 = 15; reserva expulso aos 80 após entrar aos 70 = 10; quem não entrou = 0', () => {
+  const events = [...full(45, 45), evt('a', 'sub_in', 'R', 2, 15, 1), evt('b', 'sub_out', 'R', 2, 30, 2), evt('c', 'sub_in', 'S', 2, 25, 3), evt('d', 'cartao_vermelho', 'S', 2, 35, 4)]
+  const m = minutesPlayed(lineupOf(['R', 'S', 'N'], []), events)
+  assert.equal((m.get('R') as number) / 60, 15)
+  assert.equal((m.get('S') as number) / 60, 10)
+  assert.equal(m.get('N'), 0)
+})
+
+test('minutos: titular expulso aos 30 = 30; 2x25 = 50; 47 + 45 = 92', () => {
+  assert.equal((minutesPlayed(lineupOf(['T'], ['T']), [...full(45, 45), evt('r', 'cartao_vermelho', 'T', 1, 30, 1)]).get('T') as number) / 60, 30)
+  assert.equal((minutesPlayed(lineupOf(['T'], ['T']), full(25, 25)).get('T') as number) / 60, 50)
+  assert.equal((minutesPlayed(lineupOf(['T'], ['T']), full(47, 45)).get('T') as number) / 60, 92)
+})
+
+test('minutos: soma do lado = duração × jogadores em campo − minutos perdidos por expulsão (90 min, 1 expulsão aos 30)', () => {
+  const ids = Array.from({ length: 11 }, (_, i) => `J${i}`)
+  const m = minutesPlayed(lineupOf(ids, ids), [...full(45, 45), evt('r', 'cartao_vermelho_2o_amarelo', 'J3', 1, 30, 1)])
+  const total = [...m.values()].reduce((a, b) => a + b, 0) / 60
+  assert.equal(total, 11 * 90 - 60)
+})
+
+test('minutos: expulso não volta por uma entrada atrasada; prorrogação soma depois dos 90', () => {
+  const events = [...full(45, 45), evt('r', 'cartao_vermelho', 'T', 1, 20, 1), evt('x', 'sub_in', 'T', 2, 10, 2), evt('p3', 'period_start', null, 3, 0), evt('p3e', 'period_end', null, 3, 15)]
+  assert.equal((minutesPlayed(lineupOf(['T', 'U'], ['T', 'U']), events).get('T') as number) / 60, 20)
+  assert.equal((minutesPlayed(lineupOf(['U'], ['U']), events).get('U') as number) / 60, 105)
+})

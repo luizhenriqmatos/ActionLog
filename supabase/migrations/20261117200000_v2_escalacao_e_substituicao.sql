@@ -1,0 +1,3 @@
+-- Aplicada via Supabase como v2_escalacao_e_substituicao_fase_4_1_4_2 (SQL completo no registro de migrações).
+-- Tabelas escalacao, escalacao_atleta (titular/reserva/relacionado, capitão único, posicao_vigencia), substituicao;
+-- trigger private.escalacao_atleta_valida (mesmo clube, não arquivado, categoria do lado); private.substituicoes_derivar(match).

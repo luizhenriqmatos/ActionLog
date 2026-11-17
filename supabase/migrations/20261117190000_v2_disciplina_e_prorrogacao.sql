@@ -1,0 +1,3 @@
+-- Aplicada via Supabase como v2_disciplina_e_prorrogacao_fase_4_3 (SQL completo no registro de migrações).
+-- Períodos 1..6 (prorrogação); tipos cartao_amarelo/cartao_vermelho/cartao_vermelho_2o_amarelo/impedimento;
+-- status 'revisao'; triggers private.match_event_disciplina / _derivar_vermelho / _anular_derivados.

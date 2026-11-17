@@ -194,3 +194,9 @@ Migration `20261117120000_v2_partida.sql` (aplicada em produção com o nome `v2
 - O lugar escolhido (`match_players.slot`, ex. `433.ZAG1`) define o setor do titular (D-L). Regras puras em `src/lib/formation.ts` (6 testes), tela em `src/components/LineupBoard.tsx`.
 - Não faz ainda: salvar a escalação como padrão da categoria (fora de um jogo), gravar a posição escolhida na ficha do atleta, arrastar e soltar, vigência de posição dentro do jogo (Fase 4.1).
 - Escalação, complemento: botão **Último jogo** (relação nova sem ninguém: reaplica formação e titulares do último jogo da categoria que tinha escalação em campo; o "padrão da categoria" é o último jogo, sem tabela nova) e opção **Gravar a posição na ficha** dos atletas que não tinham posição, marcada por padrão.
+
+## Fase 4 (banco + minutos)
+- 4.3 aplicada: prorrogação (período 1..6), cartões, impedimento, vermelho derivado do 2º amarelo (trigger), expulso sem lances/substituição, fila offline atrasada → status 'revisao'. Testes de banco OK (rollback).
+- 4.1/4.2 aplicadas: escalacao, escalacao_atleta, substituicao + validação de categoria/clube; substituicoes_derivar(match) ainda não chamada por nada.
+- App: minutesPlayed trata vermelho e prorrogação (61 testes).
+- PENDENTE: UI de cartões/impedimento no jogo ao vivo; gravar escalacao a partir de match_players; decidir remoção real em removeFromLineup; backfill de substituicao.
