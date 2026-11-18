@@ -1,0 +1,159 @@
+/* Site público para clubes (artboard Main.dc.html do canvas).
+   Tudo sob .club-site: não vaza para o aplicativo. Usa os tokens de tema que
+   já existem em styles.css, mais três próprios do artboard. */
+
+.club-site {
+  --copper: #d67a3b;
+  --edge: #e7e5e3;
+  --cs-shadow: 0 1px 3px rgba(51, 33, 19, 0.04), 0 18px 50px -22px rgba(17, 17, 17, 0.18);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  line-height: 1.5;
+}
+[data-theme='dark'] .club-site {
+  --edge: #2e2a27;
+  --cs-shadow: 0 18px 50px -22px rgba(0, 0, 0, 0.9);
+}
+.club-site a { color: var(--accent); text-decoration: none }
+.club-site a:hover { color: var(--ink) }
+.club-site h1, .club-site h2, .club-site h3 { font-weight: 400; letter-spacing: -0.025em; margin: 0 }
+.club-site p { margin: 0 }
+.club-site section { max-width: 1180px; margin: 0 auto; padding: 0 24px }
+
+/* ---------- nav ---------- */
+.cs-nav { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--rule) }
+.cs-nav-inner { max-width: 1180px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 24px }
+.cs-brand { display: flex; align-items: center; gap: 10px; color: var(--ink) }
+.cs-brand-mark { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 600 }
+.cs-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em }
+.cs-links { display: flex; gap: 4px; margin-left: 8px }
+.cs-links a { padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; color: var(--body) }
+.cs-links a:hover { background: var(--panel); color: var(--ink) }
+.cs-nav-actions { margin-left: auto; display: flex; align-items: center; gap: 10px }
+
+/* ---------- botões e utilitários ---------- */
+.cs-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 10px; font-size: 13px; font-weight: 700; white-space: nowrap }
+.cs-btn-lg { min-height: 48px; padding: 0 22px; font-size: 14px }
+.cs-btn-primary { background: var(--ink); color: var(--bg) }
+.cs-btn-primary:hover { color: var(--bg); filter: brightness(1.15) }
+.cs-btn-ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--rule) }
+.cs-btn-ghost:hover { background: var(--panel); color: var(--ink) }
+.cs-eyebrow { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; color: var(--muted) }
+.cs-lead { font-size: 18px; color: var(--body); max-width: 60ch }
+.cs-cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
+.cs-mono { font: 700 11px ui-monospace, SFMono-Regular, monospace }
+.cs-contact { font: 700 13px ui-monospace, SFMono-Regular, monospace; color: var(--muted) }
+
+/* ---------- hero ---------- */
+.cs-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 48px; align-items: center; padding-top: 72px; padding-bottom: 72px }
+.cs-hero h1 { font-size: clamp(40px, 4.6vw, 66px); line-height: 1.02; margin: 14px 0 18px }
+.cs-hero .cs-cta-row { margin-top: 26px }
+.cs-mock { margin: 0 }
+.cs-mock figcaption { margin-top: 12px; font-size: 12px; color: var(--muted) }
+.cs-mock-panel { background: var(--surface); border: 1px solid var(--edge); border-radius: 20px; padding: 18px; box-shadow: var(--cs-shadow) }
+.cs-mock-score { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 14px }
+.cs-live { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-green) }
+.cs-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--c-green) }
+.cs-clock { font-size: 34px; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums }
+.cs-clock-sm { font-size: 20px }
+.cs-score { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--body) }
+.cs-score b { font-size: 22px; letter-spacing: -0.02em; margin: 0 6px }
+.cs-score span { color: var(--muted) }
+.cs-mock-sectors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
+.cs-mock-sector { background: var(--panel); border: 1px solid var(--rule); border-radius: 15px; padding: 10px }
+.cs-mock-sector-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 12px; font-weight: 600; margin-bottom: 8px }
+.cs-mock-sector-top .cs-mono { color: var(--muted); font-weight: 700 }
+.cs-mock-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--rule); font-size: 12px }
+.cs-mock-row:first-of-type { border-top: 0 }
+.cs-jersey { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--fill); font-weight: 600; font-size: 12px; flex: none }
+.cs-mock-pos { color: var(--body); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.cs-mock-val { margin-left: auto; display: flex; align-items: baseline; gap: 4px; color: var(--muted); white-space: nowrap }
+.cs-mock-val strong { font-size: 15px; color: var(--ink) }
+
+/* ---------- prova ---------- */
+.cs-proof { padding-top: 16px; padding-bottom: 64px; border-top: 1px solid var(--rule) }
+.cs-proof-line { padding-top: 40px; font-size: 16px; color: var(--body); max-width: 70ch }
+.cs-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; margin: 28px 0 }
+.cs-numbers div { background: var(--surface); border: 1px solid var(--rule); border-radius: 20px; padding: 20px 22px }
+.cs-numbers strong { display: block; font-size: 44px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.1 }
+.cs-numbers span { font-size: 13px; color: var(--muted) }
+.cs-quote { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 20px; padding: 26px }
+.cs-quote p { font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif; font-size: 22px; line-height: 1.35; color: var(--ink) }
+.cs-quote footer { margin-top: 12px; font-size: 13px; color: var(--muted) }
+.cs-quote footer span { color: var(--ink); font-weight: 600 }
+
+/* ---------- capítulo e cenas ---------- */
+.cs-chapter { padding: 72px 24px 8px }
+.cs-chapter h2 { font-size: clamp(30px, 3.4vw, 44px); max-width: 22ch }
+.cs-scene { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 48px; align-items: center; padding-top: 56px; padding-bottom: 56px }
+.cs-scene-alt .cs-scene-copy { order: 2 }
+.cs-scene h3 { font-size: clamp(24px, 2.4vw, 34px); margin: 12px 0 14px; max-width: 26ch }
+.cs-scene p { font-size: 16px; color: var(--body); max-width: 52ch }
+.cs-art-note { margin-top: 10px; font-size: 12px; color: var(--muted) }
+.cs-phones { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px }
+.cs-phone { background: var(--surface); border: 1px solid var(--edge); border-radius: 20px; padding: 14px; box-shadow: var(--cs-shadow) }
+.cs-phone-top { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em }
+.cs-phone-row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--rule); font-size: 12px; color: var(--body) }
+.cs-phone-row strong { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums }
+.cs-bars { background: var(--surface); border: 1px solid var(--rule); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 14px }
+.cs-bar span { display: block; font-size: 13px; margin-bottom: 6px }
+.cs-bar-track { height: 8px; border-radius: 4px; background: var(--fill) }
+.cs-bar-fill { height: 8px; border-radius: 4px; background: var(--ink) }
+.cs-sheet { background: var(--surface); border: 1px solid var(--edge); border-radius: 20px; padding: 24px; box-shadow: var(--cs-shadow); display: flex; flex-direction: column; gap: 10px }
+.cs-sheet-top { font-size: 12px; color: var(--muted) }
+.cs-sheet-title { font-size: 28px; font-weight: 400; letter-spacing: -0.025em }
+.cs-sheet p { font-size: 14px; color: var(--body); max-width: none }
+.cs-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; background: var(--surface); border: 1px solid var(--rule); border-radius: 20px; padding: 16px }
+.cs-week-day { background: var(--panel); border: 1px solid var(--fill); border-radius: 10px; padding: 12px 4px; min-height: 84px; display: flex; flex-direction: column; align-items: center; gap: 8px }
+.cs-week-day span { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted) }
+.cs-week-day b { margin-top: auto; color: var(--muted) }
+.cs-week-day.is-md { background: var(--amber-soft); border-color: var(--amber-line) }
+.cs-week-day.is-md b { color: var(--c-amber) }
+
+/* ---------- matriz e perguntas ---------- */
+.cs-matrix { padding-top: 64px; padding-bottom: 64px }
+.cs-matrix-head { margin-bottom: 24px }
+.cs-matrix-head h3 { font-size: clamp(26px, 2.6vw, 38px); margin-top: 12px }
+.cs-matrix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px }
+.cs-matrix-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 20px; padding: 20px }
+.cs-matrix-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin-bottom: 8px }
+.cs-matrix-card p { font-size: 14px; color: var(--body) }
+.cs-soon { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-amber); background: var(--amber-soft); border-radius: 8px; padding: 2px 7px }
+.cs-faq { padding-top: 16px; padding-bottom: 72px }
+.cs-faq h3 { font-size: clamp(24px, 2.4vw, 34px); margin-bottom: 20px }
+.cs-faq-list { display: grid; gap: 10px }
+.cs-faq-item { background: var(--panel); border: 1px solid var(--rule); border-radius: 20px; padding: 20px 22px }
+.cs-faq-q { font-size: 15px; font-weight: 600; margin-bottom: 6px }
+.cs-faq-item p { font-size: 14px; color: var(--body); max-width: 80ch }
+
+/* ---------- fechamento ---------- */
+.cs-closing { padding-top: 64px; padding-bottom: 72px; border-top: 1px solid var(--rule) }
+.cs-closing h2 { font-size: clamp(30px, 3.4vw, 46px); max-width: 24ch; margin-bottom: 14px }
+.cs-closing .cs-cta-row { margin: 24px 0 36px }
+.cs-mock-summary { max-width: 720px }
+.cs-summary { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 12px; background: var(--surface); border: 1px solid var(--edge); border-radius: 20px; padding: 24px; box-shadow: var(--cs-shadow) }
+.cs-summary span { display: block; font-size: 13px; color: var(--muted) }
+.cs-summary strong { display: block; font-size: 40px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15 }
+.cs-summary-side strong { font-size: 26px; margin-bottom: 10px }
+.cs-dots { display: flex; gap: 6px; margin-top: 10px }
+.cs-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--copper); opacity: 0.5 }
+
+/* ---------- rodapé ---------- */
+.cs-footer { border-top: 1px solid var(--rule); margin-top: 8px; padding: 48px 24px 24px; overflow: hidden }
+.cs-footer-cols { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 32px }
+.cs-footer-cols > div { display: flex; flex-direction: column; gap: 6px }
+.cs-footer-title { font-size: 14px; font-weight: 600; margin-bottom: 4px }
+.cs-footer-cols p, .cs-footer-cols a { font-size: 13px; color: var(--muted); max-width: 40ch }
+.cs-footer-cols a:hover { color: var(--ink) }
+.cs-wordmark { margin-top: 40px; text-align: center; font-size: clamp(56px, 13vw, 170px); line-height: 0.9; font-weight: 600; letter-spacing: -0.04em; color: var(--fill); user-select: none }
+
+@media (max-width: 900px) {
+  .cs-links { display: none }
+  .cs-hero, .cs-scene { grid-template-columns: 1fr; gap: 28px; padding-top: 40px; padding-bottom: 40px }
+  .cs-scene-alt .cs-scene-copy { order: 0 }
+  .cs-mock-sectors, .cs-phones { grid-template-columns: 1fr }
+  .cs-summary { grid-template-columns: 1fr }
+  .cs-week { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+  .cs-chapter { padding-top: 40px }
+}
