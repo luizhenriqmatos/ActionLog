@@ -10,7 +10,7 @@
   --amber:#f6c66b;--amber-soft:rgba(246,198,107,.13);--amber-line:rgba(246,198,107,.4);
   --on-accent:#10151a;
   --r-xl:32px;--r-lg:26px;--r-md:20px;--r-sm:14px;
-  --font:'Plus Jakarta Sans',Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --stripes:repeating-linear-gradient(135deg,rgba(255,255,255,.07) 0 2px,transparent 2px 9px);
 }
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -851,3 +851,87 @@ button.live-clock{border:0;color:var(--ink);cursor:pointer}
 }
 .theme-toggle{display:inline-grid;place-items:center;min-width:44px;min-height:44px;border-radius:10px;background:var(--surface);color:var(--ink);border:1px solid var(--line)}
 .theme-toggle:hover{border-color:var(--muted)}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Design aprovado · menu lateral, geometria e tipografia
+   Bloco no fim do arquivo de propósito: vence pela cascata, sem reescrever
+   as regras originais. Só aparência — os tokens de cor já vinham do
+   [data-theme="light"] que existia.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.app-frame{display:flex;align-items:stretch;min-height:100vh;background:var(--bg)}
+.sidebar{flex:0 0 232px;width:232px;box-sizing:border-box;padding:28px 20px;
+  border-right:1px solid var(--line);display:flex;flex-direction:column;gap:28px;
+  position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--bg)}
+.sidebar-brand{display:flex;align-items:center;gap:10px;padding:0 8px}
+.sidebar-category{display:flex;flex-direction:column;gap:2px;justify-content:center;
+  min-height:52px;padding:6px 14px;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px}
+.sidebar-category-label{font-size:11px;color:var(--muted)}
+.sidebar-category select{background:transparent;border:0;color:var(--ink);font-size:15px;
+  font-weight:600;padding:0;margin:0;width:100%}
+.sidebar-nav{display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 12px;
+  border-radius:10px;font-size:14px;font-weight:600;color:var(--ink-2);background:transparent;
+  border:0;text-align:left}
+.nav-item:hover:not(.soon){background:var(--surface-2);color:var(--ink)}
+.nav-item.active{background:var(--surface-3);color:var(--ink)}
+.nav-item .nav-label{flex:1;min-width:0}
+.nav-item b{font-size:11px;font-weight:700;color:var(--muted)}
+.nav-item.soon{cursor:default;color:var(--muted)}
+.nav-soon{font-size:10px;font-weight:700;font-style:normal;letter-spacing:.06em;color:var(--amber)}
+.sidebar-foot{margin-top:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* O conteúdo divide a linha com o menu em vez de ser centralizado na página. */
+.app-frame .app-shell{flex:1 1 auto;min-width:0;max-width:1200px;margin:0;
+  padding:32px clamp(20px,3.4vw,48px) 64px}
+.app-frame .app-header{padding-bottom:20px}
+.app-frame .hub-intro{padding-top:28px}
+
+/* Títulos: peso 400 e entreletra -0.025em, na escala do design. */
+h1,h2,h3{font-weight:400}
+.picker-hero h1{font-size:clamp(34px,5vw,56px);font-weight:400;letter-spacing:-.025em;line-height:1.02}
+.hub-intro h1{font-size:clamp(34px,3.6vw,52px);font-weight:400;letter-spacing:-.025em;line-height:1.02}
+.section-heading h2,.day-panel h3{font-weight:400;letter-spacing:-.025em}
+.report-modal h2{font-size:clamp(30px,3.4vw,42px);font-weight:400;letter-spacing:-.025em}
+.category-copy strong,.metric-card strong,.kpi-value,.finishing-total strong,
+.leg-metrics strong,.report-summary strong,.event-date strong{letter-spacing:-.025em}
+.brand-mark,.wordmark,.avatar,.category-count,.jersey{font-weight:600}
+
+/* Cartões 20px, linhas internas 15px, controles 10px, selos 8px. */
+.category-card,.form-card,.empty-state,.report-modal,.calendar-card,.day-panel,
+.leg-card,.finishing-total,.scout-toolbar,.athlete-card,.event-card,
+.metric-card,.kpi-card{border-radius:20px}
+.scout-day-context,.leg-metrics button,.calendar-cell,.sync-facts div,
+.report-session-label{border-radius:15px}
+.primary-button,.secondary-button,.today-button,.status-pill,.soft-stat,
+.team-field input,.form-card input,.form-card select,.athlete-select select,
+.day-form input,.day-form select,.sync-form input,.input-with-icon,
+.view-switch,.view-switch button,.mode-switch button,.quick-button,
+.avatar,.metric-icon{border-radius:10px}
+.avatar.large{border-radius:12px}
+.tabs b,.nav-item b,.low-pill,.md-badge,.foot-chip,.calendar-event-pill{border-radius:8px}
+
+/* Botão primário do design: preto com texto claro, sem cápsula. */
+.primary-button{background:var(--ink);color:var(--bg);border:1px solid var(--ink)}
+.primary-button:hover{background:var(--ink);filter:brightness(1.12)}
+.secondary-button{background:var(--surface);border:1px solid var(--line)}
+.primary-button,.secondary-button,.quick-button,.today-button{min-height:44px}
+
+/* O design é plano: cartões não levantam no hover. */
+.category-card:hover,.metric-card:hover{transform:none;border-color:var(--muted)}
+
+/* ───────── Mobile: o menu vira barra horizontal rolável ─────────
+   Sem isto, 232px fixos inutilizariam o celular, que é onde o aplicativo é
+   mais usado em dia de jogo. */
+@media (max-width:900px){
+  .app-frame{display:block}
+  .sidebar{position:static;width:auto;height:auto;flex:none;border-right:0;
+    border-bottom:1px solid var(--line);padding:16px 16px 10px;gap:14px}
+  .sidebar-nav{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px;scrollbar-width:none}
+  .sidebar-nav::-webkit-scrollbar{display:none}
+  .nav-item{width:auto;flex:none;white-space:nowrap;padding:0 14px}
+  .sidebar-foot{margin-top:0;justify-content:space-between}
+  .app-frame .app-shell{max-width:none;padding:20px 16px 56px}
+  .app-frame .hub-intro{padding-top:16px}
+}
