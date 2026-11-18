@@ -3,11 +3,17 @@ export const THEME_KEY = 'scouthouse.theme'
 
 const isChoice = (value: unknown): value is ThemeChoice => value === 'light' || value === 'dark'
 
-/** Preferência salva; sem ela, o que o aparelho pede (prefers-color-scheme); sem os dois, escuro (a cara atual do app). */
-export function resolveTheme(stored: string | null, prefersLight: boolean | null): ThemeChoice {
+/**
+ * Preferência salva vence sempre. Sem ela, claro — é o padrão do design
+ * aprovado pelo diretor.
+ *
+ * Mudou em relação à versão anterior, que caía em escuro: só o caso SEM
+ * preferência salva mudou. Quem já escolheu escuro continua no escuro, porque
+ * `stored` é lido antes de qualquer outra coisa.
+ */
+export function resolveTheme(stored: string | null, _prefersLight: boolean | null): ThemeChoice {
   if (isChoice(stored)) return stored
-  if (prefersLight === true) return 'light'
-  return 'dark'
+  return 'light'
 }
 
 export function readTheme(): ThemeChoice {
